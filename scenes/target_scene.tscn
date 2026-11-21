@@ -1,0 +1,89 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/target/target_scene.gd" id="1_scene"]
+[ext_resource type="Script" path="res://src/world/terrain.gd" id="2_terrain"]
+[ext_resource type="Script" path="res://src/camera/strategy_camera.gd" id="3_camera"]
+
+[sub_resource type="ProceduralSkyMaterial" id="SkyMaterial"]
+sky_top_color = Color(0.2, 0.42, 0.75, 1)
+sky_horizon_color = Color(0.74, 0.84, 0.93, 1)
+sky_curve = 0.12
+ground_bottom_color = Color(0.2, 0.22, 0.18, 1)
+ground_horizon_color = Color(0.68, 0.78, 0.86, 1)
+sun_angle_max = 20.0
+sun_curve = 0.1
+
+[sub_resource type="Sky" id="Sky"]
+sky_material = SubResource("SkyMaterial")
+radiance_size = 3
+
+[sub_resource type="Environment" id="Environment"]
+background_mode = 2
+sky = SubResource("Sky")
+ambient_light_source = 3
+ambient_light_energy = 0.85
+reflected_light_source = 2
+tonemap_mode = 4
+tonemap_exposure = 1.1
+ssao_enabled = true
+ssao_radius = 2.0
+ssao_intensity = 0.7
+ssao_detail = 0.0
+glow_enabled = true
+glow_intensity = 0.25
+glow_bloom = 0.05
+fog_enabled = true
+fog_light_color = Color(0.72, 0.8, 0.9, 1)
+fog_sun_scatter = 0.25
+fog_density = 0.0005
+fog_aerial_perspective = 0.12
+fog_sky_affect = 0.2
+adjustment_enabled = true
+adjustment_contrast = 1.08
+adjustment_saturation = 1.12
+
+[node name="TargetScene" type="Node3D"]
+script = ExtResource("1_scene")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation = Vector3(-0.86, -2.05, 0)
+light_color = Color(1, 0.8, 0.54, 1)
+light_energy = 2.7
+shadow_enabled = true
+shadow_bias = 0.05
+shadow_normal_bias = 1.5
+shadow_blur = 1.2
+directional_shadow_mode = 2
+directional_shadow_blend_splits = true
+directional_shadow_max_distance = 260.0
+
+[node name="Terrain" type="Node3D" parent="."]
+script = ExtResource("2_terrain")
+generate_on_ready = false
+
+[node name="CameraRig" type="Node3D" parent="." node_paths=PackedStringArray("terrain", "sun")]
+script = ExtResource("3_camera")
+terrain = NodePath("../Terrain")
+sun = NodePath("../Sun")
+pitch_degrees = 36.0
+min_distance = 15.0
+max_distance = 320.0
+start_distance = 95.0
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+current = true
+fov = 45.0
+
+[node name="Interface" type="CanvasLayer" parent="."]
+
+[node name="Label" type="Label" parent="Interface"]
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 900.0
+offset_bottom = 40.0
+theme_override_colors/font_color = Color(0.91, 0.86, 0.75, 1)
+theme_override_colors/font_outline_color = Color(0.09, 0.07, 0.055, 1)
+theme_override_constants/outline_size = 6

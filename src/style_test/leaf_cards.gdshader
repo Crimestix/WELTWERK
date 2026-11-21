@@ -6,7 +6,8 @@ render_mode cull_disabled, diffuse_burley, specular_schlick_ggx;
 uniform sampler2D leaf_atlas : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float alpha_cut = 0.42;
 uniform float wind_strength = 0.035;
-uniform vec3 tint : source_color = vec3(1.0);
+uniform vec3 tint = vec3(1.0);
+uniform float backlight = 0.55;
 
 void vertex() {
 	vec3 wp = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -25,5 +26,5 @@ void fragment() {
 	ALPHA_SCISSOR_THRESHOLD = alpha_cut;
 	ROUGHNESS = 0.72;
 	SPECULAR = 0.35;
-	BACKLIGHT = ALBEDO * 0.55;
+	BACKLIGHT = ALBEDO * backlight;
 }

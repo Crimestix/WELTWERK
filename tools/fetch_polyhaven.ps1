@@ -10,7 +10,8 @@ param(
 $ErrorActionPreference = "Stop"
 $root = Join-Path $PSScriptRoot "..\assets\external\polyhaven"
 $models = @("island_tree_02", "shrub_04", "shrub_02", "rock_moss_set_02", "boulder_01", "rock_07", "grass_medium_02")
-$textures = @("rocky_terrain_02", "aerial_grass_rock", "brown_mud_leaves_01", "aerial_rocks_02", "mossy_rock", "coast_sand_01")
+$textures = @("rocky_terrain_02", "aerial_grass_rock", "brown_mud_leaves_01", "aerial_rocks_02", "mossy_rock", "coast_sand_01",
+    "rock_boulder_dry", "withered_grass", "river_small_rocks", "bark_brown_02")
 
 function Save-File($url, $target) {
     if (Test-Path $target) { return }

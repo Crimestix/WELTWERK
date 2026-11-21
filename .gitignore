@@ -9,6 +9,8 @@ export_credentials.cfg
 /assets/external/
 # Higgsfield-Originale (Laubatlas liegt als assets/style_c/leaf_atlas.png im Repository)
 /assets/style_c/source/
+/assets/target/source/*
+!/assets/target/source/generated.json
 
 # Erzeugte Programme
 /build/

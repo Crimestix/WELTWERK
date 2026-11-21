@@ -1,0 +1,23 @@
+{
+  "build_ms": 3967.123,
+  "counts": {
+    "Blumen": 9000,
+    "Bäume": 46,
+    "Büsche": 70,
+    "Felsbänke": 89,
+    "Findlinge": 60,
+    "Gras": 140000,
+    "Steine": 420,
+    "Wald": 2471
+  },
+  "draw_calls": 188.0,
+  "fps_avg": 49.3222607598053,
+  "frame_ms_avg": 20.2748208333333,
+  "frame_ms_p95": 22.973,
+  "gpu": "NVIDIA GeForce RTX 2070 SUPER",
+  "primitives": 5430730.0,
+  "resolution": "(1440.0, 810.0)",
+  "static_mem_mb": 122.103628158569,
+  "video_mem_mb": 353.863403320313,
+  "view": "ziel"
+}

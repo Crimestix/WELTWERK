@@ -1,0 +1,20 @@
+oak_1: 6800 Dreiecke, Höhe 11.3 m, 512 KB
+oak_2: 9064 Dreiecke, Höhe 10.6 m, 682 KB
+oak_3: 9104 Dreiecke, Höhe 10.3 m, 688 KB
+beech_1: 4372 Dreiecke, Höhe 11.9 m, 328 KB
+beech_2: 4408 Dreiecke, Höhe 11.8 m, 330 KB
+young_1: 1180 Dreiecke, Höhe 6.5 m, 80 KB
+young_2: 1168 Dreiecke, Höhe 6.4 m, 79 KB
+far_1: 1480 Dreiecke, Höhe 10.7 m, 97 KB
+far_2: 906 Dreiecke, Höhe 12.0 m, 59 KB
+far_3: 1094 Dreiecke, Höhe 10.9 m, 71 KB
+bush_1: 240 Dreiecke
+bush_2: 150 Dreiecke
+bush_3: 210 Dreiecke
+ledge_1: 2028 Dreiecke
+ledge_2: 2028 Dreiecke
+ledge_3: 2700 Dreiecke
+boulder_1: 768 Dreiecke
+boulder_2: 768 Dreiecke
+stone_1: 300 Dreiecke
+Dauer: 2.8 s
