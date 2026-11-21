@@ -37,6 +37,10 @@ var _noises: Dictionary
 ## Lage des Erosionsreliefs in diesem Kontinent (fest aus dem Streu-Ausgangswert).
 var _relief_alpine: Array
 var _relief_hills: Array
+## Gespeicherte Detailregionen dieses Kontinents (Daten aus RegionStore), grob nach fein sortiert.
+## Ihre Grunddaten ersetzen die Erzeugung im gleichen Raster; gröbere Ausschnitte fassen ihr fertiges
+## Ergebnis zusammen (Zellmittel).
+var region_data: Array = []
 ## Rauschen für Küstendetail gezeichneter Formen und Seeufer – fest je Kontinent (Streuung),
 ## bleibt also bei „Variante erzeugen“ gleich.
 var _detail: Dictionary
@@ -89,7 +93,9 @@ static func _noise(seed_value: int, label: String) -> FastNoiseLite:
 
 
 ## Kompletter Ausschnitt: Schutz, Grundform, alle Bearbeitungen, Ergebnis.
-func window(cx: float, cy: float, size: float, res: int = 257) -> TerrainWindow:
+## summaries = false: ohne Zusammenfassung feinerer Regionen (Globus und Übersichtskarte – dort ist
+## eine Region höchstens wenige Bildpunkte groß, der Unterschied unsichtbar, die Rechnung aber teuer).
+func window(cx: float, cy: float, size: float, res: int = 257, summaries: bool = true) -> TerrainWindow:
 	var w := TerrainWindow.new(cx, cy, size, res)
 	w.climate = climate
 	w.extent_half = continent["size_km"] * 500.0
@@ -108,7 +114,362 @@ func window(cx: float, cy: float, size: float, res: int = 257) -> TerrainWindow:
 		if touches(w, stroke):
 			apply_stroke(w, stroke)
 	w.compose_all()
+	if summaries:
+		_apply_region_summaries(w)
+	var exact := _exact_region(w) if summaries else {}
+	if not exact.is_empty():
+		var key := _result_key(exact)
+		# Kopien: Der angezeigte Ausschnitt wird beim Malen live verändert.
+		var result := {"height": w.height.duplicate(), "forest": w.forest.duplicate()}
+		_store_result(key, result)
+		if not private_caches:
+			_keep_on_disk(exact.get("result_path", ""), key, result)
 	return w
+
+
+## Ergebnisse der Detailregionen (fertige Höhe und Wald in Regionsauflösung) für die
+## Zusammenfassung in gröberen Ansichten – zwischengespeichert nach Stand (Grundform, Regionen,
+## berührende Bearbeitungen): Eine Bearbeitung rechnet nur die Regionen neu, die sie berührt.
+## Abgeleitet; auf der Platte nur als geprüfter Zwischenstand neben der Region (RegionStore).
+const RESULT_CACHE_SIZE := 48
+## Fassung der Rechnung im Stand: bei jeder Änderung an Erzeugung oder Zusammenfassung erhöhen, damit
+## gespeicherte Zwischenstände älterer Programmfassungen nicht mehr gelten.
+const RESULT_VERSION := 7
+static var _results := {}
+## Eigene, leere Zwischenspeicher statt der gemeinsamen (und keine Zwischenstände auf der Platte):
+## für eine unabhängige Gegenrechnung, die die Zwischenspeicher des Editors nicht berührt.
+var private_caches := false
+var _own_results := {}
+var _own_generated := {}
+static var _result_order: Array = []
+## Welcher Stand liegt je Zwischenstandsdatei auf der Platte (Pfad → Stand)?
+static var _on_disk := {}
+
+
+static func clear_region_results() -> void:
+	_results.clear()
+	_result_order.clear()
+	_on_disk.clear()
+	_summaries.clear()
+	_summary_order.clear()
+
+
+## Zwischenstand auf der Platte nachführen: Der zuletzt gebrauchte Stand soll dort liegen (auch nach
+## Rückgängig und Wiederholen, wenn das Ergebnis aus dem Speicher kommt).
+static func _keep_on_disk(path: String, key: String, result: Dictionary) -> void:
+	if path == "" or _on_disk.get(path, "") == key:
+		return
+	RegionStore.save_result(path, key, result)
+	_on_disk[path] = key
+
+
+## Gröbere Ansicht über Detailregionen: Höhe und Wald einer Zelle sind das Mittel des fertig
+## berechneten Regionsgeländes (Grunddaten und Bearbeitungen in Regionsauflösung) über die Zellfläche –
+## eine vereinfachte Zusammenfassung derselben Landschaft. Je Stichprobe gilt die feinste Region, die
+## sie bedeckt (am Regionsrand weich in die nächstgröbere übergehend); wo keine Region liegt, bleibt
+## der eigene Wert der Zelle.
+##
+## Schneller: Eine Region, die ganz in einer anderen, im Verhältnis zu dieser Ansicht schon feinen
+## Region liegt, steckt bereits in deren Ergebnis und wird nicht noch einmal abgetastet. Der Beitrag
+## der Regionen wird je Gruppe zusammenhängender Regionen nach deren Stand gemerkt; die Zelle ergibt
+## sich dann als Regionsbeitrag + nicht bedeckter Anteil × eigener Wert.
+const SUMMARY_CACHE_SIZE := 64
+## Eine enthaltene Region wird übersprungen, wenn die enthaltende höchstens so grob ist (Anteil der Zelle).
+const NESTED_CELL_RATIO := 1.0 / 6.0
+static var _summaries := {}
+static var _summary_order: Array = []
+var _own_summaries := {}
+
+
+func _apply_region_summaries(w: TerrainWindow) -> void:
+	var finer := _finer_regions(w)
+	if finer.is_empty():
+		return
+	# Grob nach fein (region_data ist so sortiert): feinere überschreiben gröbere.
+	var layers := []
+	for data in finer:
+		var rh: float = float(data["size"]) * 0.5
+		layers.append({"idx": layers.size(), "data": data, "res": int(data["res"]),
+			"cx": float(data["cx"]), "cy": float(data["cy"]), "size": float(data["size"]),
+			"x0": float(data["cx"]) - rh, "x1": float(data["cx"]) + rh, "y0": float(data["cy"]) - rh, "y1": float(data["cy"]) + rh,
+			"cell": float(data["size"]) / float(int(data["res"]) - 1)})
+	# Enthaltene Regionen, deren Zusammenfassung schon im Ergebnis einer feinen enthaltenden steckt.
+	var used := []
+	for l in layers:
+		var nested := false
+		for m in layers:
+			if m["idx"] == l["idx"] or m["cell"] <= l["cell"] or m["cell"] > w.cell * NESTED_CELL_RATIO:
+				continue
+			if l["x0"] >= m["x0"] and l["x1"] <= m["x1"] and l["y0"] >= m["y0"] and l["y1"] <= m["y1"]:
+				nested = true
+				break
+		if not nested:
+			used.append(l)
+	# Gruppen: Regionen, deren Zellbereiche sich berühren, werden gemeinsam abgetastet und gemerkt.
+	# Gruppen als Listen von Indizes (Wörterbücher nicht vergleichen – das wäre ein tiefer Vergleich).
+	var groups := []
+	for l in used:
+		var merged := [l["idx"]]
+		var rest_groups := []
+		for g in groups:
+			var touches_group := false
+			for mi in g:
+				var m: Dictionary = layers[mi]
+				if l["x0"] - w.cell < m["x1"] and l["x1"] + w.cell > m["x0"] and l["y0"] - w.cell < m["y1"] and l["y1"] + w.cell > m["y0"]:
+					touches_group = true
+					break
+			if touches_group:
+				merged.append_array(g)
+			else:
+				rest_groups.append(g)
+		rest_groups.append(merged)
+		groups = rest_groups
+	var height := w.height
+	var forest := w.forest
+	for g in groups:
+		# Gleiche Reihenfolge wie in region_data (grob nach fein).
+		var ordered := []
+		for l in layers:
+			if (g as Array).has(l["idx"]):
+				ordered.append(l)
+		var keys := []
+		for l in ordered:
+			keys.append(_result_key(l["data"]).sha256_text())
+		var gkey := canonical([w.cx, w.cy, w.size, w.res, keys])
+		var part: Dictionary = _own_summaries.get(gkey, {}) if private_caches else _summaries.get(gkey, {})
+		if part.is_empty():
+			part = _summary_part(w, ordered)
+			if private_caches:
+				_own_summaries[gkey] = part
+			else:
+				_summaries[gkey] = part
+				_summary_order.append(gkey)
+				while _summary_order.size() > SUMMARY_CACHE_SIZE:
+					_summaries.erase(_summary_order.pop_front())
+		elif not private_caches:
+			_summary_order.erase(gkey)
+			_summary_order.append(gkey)
+		var i0: int = part["i0"]
+		var i1: int = part["i1"]
+		var j0: int = part["j0"]
+		var mh: PackedFloat64Array = part["h"]
+		var mf: PackedFloat64Array = part["f"]
+		var rest: PackedFloat64Array = part["rest"]
+		var width := i1 - i0 + 1
+		for idx in rest.size():
+			var r := rest[idx]
+			if r < 0.0:
+				continue
+			var k := (j0 + idx / width) * w.res + i0 + idx % width
+			height[k] = mh[idx] + r * height[k]
+			forest[k] = mf[idx] + r * forest[k]
+	w.height = height
+	w.forest = forest
+
+
+## Beitrag einer Gruppe von Regionen zu den Zellen eines Rasters: je Zelle Mittel der Regionswerte
+## (h, f, mit Gewicht) und nicht bedeckter Anteil (rest; −1 = Zelle gar nicht bedeckt).
+func _summary_part(w: TerrainWindow, ordered: Array) -> Dictionary:
+	for l in ordered:
+		var result := region_result(l["data"])
+		l["h"] = result.get("height", PackedFloat32Array())
+		l["f"] = result.get("forest", PackedFloat32Array())
+	var res := w.res
+	var left := w.cx - w.size * 0.5
+	var top := w.cy + w.size * 0.5
+	var bx0 := INF
+	var bx1 := -INF
+	var by0 := INF
+	var by1 := -INF
+	for l in ordered:
+		bx0 = minf(bx0, l["x0"])
+		bx1 = maxf(bx1, l["x1"])
+		by0 = minf(by0, l["y0"])
+		by1 = maxf(by1, l["y1"])
+	var i0 := clampi(int(floor((bx0 - left) / w.cell)), 0, res - 1)
+	var i1 := clampi(int(ceil((bx1 - left) / w.cell)), 0, res - 1)
+	var j0 := clampi(int(floor((top - by1) / w.cell)), 0, res - 1)
+	var j1 := clampi(int(ceil((top - by0) / w.cell)), 0, res - 1)
+	var width := i1 - i0 + 1
+	var count := width * (j1 - j0 + 1)
+	var out_h := PackedFloat64Array()
+	var out_f := PackedFloat64Array()
+	var out_rest := PackedFloat64Array()
+	out_h.resize(count)
+	out_f.resize(count)
+	out_rest.resize(count)
+	out_rest.fill(-1.0)
+	var half_cell := w.cell * 0.5
+	for j in range(j0, j1 + 1):
+		var y := w.y_at(j)
+		for i in range(i0, i1 + 1):
+			var x := w.x_at(i)
+			# Regionen, die diese Zelle berühren (fein nach grob); Stichproben so dicht wie die feinste.
+			var here := []
+			var finest := INF
+			for li in range(ordered.size() - 1, -1, -1):
+				var l: Dictionary = ordered[li]
+				if (l["h"] as PackedFloat32Array).is_empty():
+					continue
+				if x + half_cell > l["x0"] and x - half_cell < l["x1"] and y + half_cell > l["y0"] and y - half_cell < l["y1"]:
+					here.append(l)
+					finest = minf(finest, l["cell"])
+			if here.is_empty():
+				continue
+			var steps := clampi(int(ceil(w.cell / finest)), 1, 48)
+			# Summen in voller Genauigkeit (Vector2 rechnet nur einfach genau).
+			var hs := 0.0
+			var fs := 0.0
+			var rs := 0.0
+			var covered := false
+			for sj in steps:
+				var qy := y + ((sj + 0.5) / steps - 0.5) * w.cell
+				for si in steps:
+					var qx := x + ((si + 0.5) / steps - 0.5) * w.cell
+					# Von der feinsten Region zur gröbsten mischen; der Rest (nicht bedeckt) ist der eigene Wert.
+					var rest := 1.0
+					for l in here:
+						var sw := RegionStore.weight(l["data"], qx, qy)
+						if sw <= 0.0:
+							continue
+						covered = true
+						var v := RegionStore.bilinear2(l["h"], l["f"], l["res"], qx, qy, l["cx"], l["cy"], l["size"])
+						hs += rest * sw * v.x
+						fs += rest * sw * v.y
+						rest *= 1.0 - sw
+						if rest <= 0.0:
+							break
+					rs += rest
+			if not covered:
+				continue
+			var n := float(steps * steps)
+			var idx := (j - j0) * width + (i - i0)
+			out_h[idx] = hs / n
+			out_f[idx] = fs / n
+			out_rest[idx] = rs / n
+	return {"i0": i0, "i1": i1, "j0": j0, "j1": j1, "h": out_h, "f": out_f, "rest": out_rest}
+
+
+## Für jede Region, deren Ergebnis für den jetzigen Stand im Speicher liegt, den Zwischenstand auf
+## der Platte nachführen (beim Speichern der Welt).
+func keep_results_on_disk() -> void:
+	for data in region_data:
+		var key := _result_key(data)
+		if not private_caches and _results.has(key):
+			_keep_on_disk(data.get("result_path", ""), key, _results[key])
+
+
+## Fertige Höhe und Wald einer Detailregion für diesen Stand: {"height", "forest"}.
+func region_result(data: Dictionary) -> Dictionary:
+	var key := _result_key(data)
+	if private_caches:
+		if not _own_results.has(key):
+			window(float(data["cx"]), float(data["cy"]), float(data["size"]), int(data["res"]))
+		return _own_results.get(key, {})
+	var path: String = data.get("result_path", "")
+	if _results.has(key):
+		_result_order.erase(key)
+		_result_order.append(key)
+		_keep_on_disk(path, key, _results[key])
+		return _results[key]
+	var hit := RegionStore.load_result(path, key, int(data["res"])) if path != "" else {}
+	if hit.is_empty():
+		# window() erkennt den genauen Regionsausschnitt und merkt sich (und speichert) das Ergebnis.
+		window(float(data["cx"]), float(data["cy"]), float(data["size"]), int(data["res"]))
+		return _results.get(key, {})
+	_on_disk[path] = key
+	_remember_result(key, hit)
+	return hit
+
+
+func _store_result(key: String, result: Dictionary) -> void:
+	if private_caches:
+		_own_results[key] = result
+	else:
+		_remember_result(key, result)
+
+
+## Stand, von dem das Ergebnis einer Region abhängt: Grundform, Klima, Regionen im Gebiet und alle
+## Bearbeitungen, die es berühren (in ihrer Reihenfolge).
+func _result_key(data: Dictionary) -> String:
+	var memo_key := canonical([data.get("checksum", ""), data["cx"], data["cy"], data["size"], data["res"]])
+	if _key_memo.has(memo_key):
+		return _key_memo[memo_key]
+	var w := TerrainWindow.new(float(data["cx"]), float(data["cy"]), float(data["size"]), 2)
+	w.cell = float(data["size"]) / float(int(data["res"]) - 1)
+	var touching := []
+	for stroke in continent["strokes"]:
+		if touches(w, stroke):
+			touching.append(stroke)
+	# Regionen im gleichen Raster (Grunddaten), gröbere (Angleichung feinerer Ausschnitte) und feinere
+	# (Zusammenfassung) – feinere mit ihrem ganzen Stand, denn ihr Ergebnis kann auch von
+	# Bearbeitungen und Nachbarn knapp außerhalb dieses Rahmens abhängen.
+	var sums := []
+	for other in region_data:
+		if is_same(other, data) or not _overlaps(w, other):
+			continue
+		var other_cell: float = float(other["size"]) / float(int(other["res"]) - 1)
+		if other_cell < w.cell * 0.999:
+			sums.append(_result_key(other).sha256_text())
+		else:
+			sums.append([other.get("checksum", ""), other.get("basis", ""), other["cx"], other["cy"], other["size"],
+				base_fingerprint(other["cx"], other["cy"], other["size"], other["res"])])
+	var key := canonical([RESULT_VERSION, int(continent["seed"]), int(continent.get("scatter_seed", 0)), str(continent.get("base", "")),
+		base_scale, float(continent["size_km"]), climate, data.get("checksum", ""), data.get("basis", ""), w.cx, w.cy, w.size, w.cell,
+		sums, touching])
+	_key_memo[memo_key] = key
+	return key
+
+
+## Gemerkte Stände dieses Samplers (gilt für seinen Stand; jede Änderung erzeugt einen neuen Sampler).
+var _key_memo := {}
+
+
+## Gleichbleibende Schreibweise eines Stands, auch nach Speichern und Laden: Zahlen auf Mikrometer
+## gerundet, ganze Zahlen wie Kommazahlen (der JSON-Leser liefert alle als Kommazahl und kann die
+## letzte Binärstelle verschieben), Schlüssel sortiert.
+static func canonical(value: Variant) -> String:
+	match typeof(value):
+		TYPE_INT, TYPE_FLOAT:
+			var v := float(value)
+			if v == floorf(v) and absf(v) < 1.0e15:
+				return str(int(v))
+			return String.num(v, 6)
+		TYPE_DICTIONARY:
+			var d: Dictionary = value
+			var keys := d.keys()
+			keys.sort()
+			var parts := PackedStringArray()
+			for k in keys:
+				parts.append(str(k) + ":" + canonical(d[k]))
+			return "{" + ",".join(parts) + "}"
+		TYPE_ARRAY, TYPE_PACKED_FLOAT32_ARRAY, TYPE_PACKED_FLOAT64_ARRAY, TYPE_PACKED_INT32_ARRAY, TYPE_PACKED_INT64_ARRAY, \
+				TYPE_PACKED_STRING_ARRAY, TYPE_PACKED_VECTOR2_ARRAY:
+			var parts := PackedStringArray()
+			for item in value:
+				parts.append(canonical(item))
+			return "[" + ",".join(parts) + "]"
+		TYPE_VECTOR2:
+			return canonical([value.x, value.y])
+		_:
+			return JSON.stringify(value)
+
+
+static func _remember_result(key: String, result: Dictionary) -> void:
+	_results[key] = result
+	_result_order.erase(key)
+	_result_order.append(key)
+	while _result_order.size() > RESULT_CACHE_SIZE:
+		_results.erase(_result_order.pop_front())
+
+
+## Ist der Ausschnitt genau eine gespeicherte Region? Dann deren Daten, sonst {}.
+func _exact_region(w: TerrainWindow) -> Dictionary:
+	for data in region_data:
+		if int(data["res"]) == w.res and is_equal_approx(float(data["size"]), w.size) \
+				and absf(float(data["cx"]) - w.cx) < w.cell * 0.01 and absf(float(data["cy"]) - w.cy) < w.cell * 0.01:
+			return data
+	return {}
 
 
 ## Zuletzt berechnete Grundformen (Ausschnitt nach Schutz und Grundform, vor allen übrigen
@@ -130,8 +491,16 @@ func _base_key(w: TerrainWindow) -> String:
 		if stroke["tool"] == "protect" and touches(w, stroke):
 			protects.append(stroke)
 	# Volle Genauigkeit (JSON mit allen Stellen): kleinste Lageunterschiede ergeben einen anderen Schlüssel.
+	var region_sums := []
+	for data in _same_scale_regions(w):
+		region_sums.append(data.get("checksum", ""))
+	for data in region_data:
+		var region_cell: float = float(data["size"]) / float(int(data["res"]) - 1)
+		if region_cell > w.cell * 1.001 and _overlaps(w, data):
+			region_sums.append([data.get("checksum", ""), data.get("basis", ""), data["cx"], data["cy"], data["size"],
+				base_fingerprint(data["cx"], data["cy"], data["size"], data["res"])])
 	return JSON.stringify([int(continent["seed"]), int(continent.get("scatter_seed", 0)), str(continent.get("base", "")),
-		base_scale, float(continent["size_km"]), float(climate["dryness"]), w.cx, w.cy, w.res, w.size, protects], "", false, true)
+		base_scale, float(continent["size_km"]), float(climate["dryness"]), w.cx, w.cy, w.res, w.size, protects, region_sums], "", false, true)
 
 
 static func clear_base_cache() -> void:
@@ -139,26 +508,199 @@ static func clear_base_cache() -> void:
 	_base_order.clear()
 
 
+## Detailregionen setzen (Daten wie von RegionStore.load_data); grob nach fein sortiert.
+func set_regions(list: Array) -> void:
+	region_data = list.duplicate()
+	region_data.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return float(a["size"]) > float(b["size"]))
+
+
+func _overlaps(w: TerrainWindow, data: Dictionary) -> bool:
+	var rh: float = float(data["size"]) * 0.5
+	var half := w.size * 0.5
+	return absf(float(data["cx"]) - w.cx) < rh + half and absf(float(data["cy"]) - w.cy) < rh + half
+
+
+## Regionen im gleichen Raster wie dieser Ausschnitt: Ihre gespeicherten Grunddaten gelten hier.
+func _same_scale_regions(w: TerrainWindow) -> Array:
+	var out := []
+	for data in region_data:
+		var region_cell: float = float(data["size"]) / float(int(data["res"]) - 1)
+		if absf(region_cell / w.cell - 1.0) < 0.001 and _overlaps(w, data):
+			out.append(data)
+	return out
+
+
+## Feinere Regionen in diesem Ausschnitt: Er zeigt ihre Zusammenfassung.
+func _finer_regions(w: TerrainWindow) -> Array:
+	var out := []
+	for data in region_data:
+		var region_cell: float = float(data["size"]) / float(int(data["res"]) - 1)
+		if region_cell < w.cell * 0.999 and _overlaps(w, data):
+			out.append(data)
+	return out
+
+
+## Grunddaten im Gebiet der Detailregionen gleichen Rasters aus deren gespeicherten Daten (zum Rand
+## hin weich in die Erzeugung übergehend). Ist der Ausschnitt genau eine Region, wird nichts erzeugt.
+func _apply_regions(w: TerrainWindow, regions: Array) -> void:
+	var res := w.res
+	var fields := {}
+	for layer in RegionStore.LAYERS:
+		fields[layer] = w.get(layer)
+	var exact_data := _exact_region(w)
+	for data in regions:
+		var exact := is_same(exact_data, data)
+		for layer in RegionStore.LAYERS:
+			var field: PackedFloat32Array = fields[layer]
+			if exact:
+				field = (data["layers"][layer] as PackedFloat32Array).duplicate()
+			else:
+				# Nur das Rechteck der Region im Raster durchgehen.
+				var rh: float = float(data["size"]) * 0.5
+				var i0 := clampi(int(floor((float(data["cx"]) - rh - (w.cx - w.size * 0.5)) / w.cell)), 0, res - 1)
+				var i1 := clampi(int(ceil((float(data["cx"]) + rh - (w.cx - w.size * 0.5)) / w.cell)), 0, res - 1)
+				var j0 := clampi(int(floor(((w.cy + w.size * 0.5) - (float(data["cy"]) + rh)) / w.cell)), 0, res - 1)
+				var j1 := clampi(int(ceil(((w.cy + w.size * 0.5) - (float(data["cy"]) - rh)) / w.cell)), 0, res - 1)
+				for j in range(j0, j1 + 1):
+					var y := w.y_at(j)
+					for i in range(i0, i1 + 1):
+						var x := w.x_at(i)
+						var wgt := RegionStore.weight(data, x, y)
+						if wgt <= 0.0:
+							continue
+						var k := j * res + i
+						field[k] = lerpf(field[k], RegionStore.sample(data, layer, x, y), wgt)
+			fields[layer] = field
+	for layer in RegionStore.LAYERS:
+		w.set(layer, fields[layer])
+
+
 func _evaluate_base_cached(w: TerrainWindow) -> void:
 	var key := _base_key(w)
-	if _base_cache.has(key):
+	if not private_caches and _base_cache.has(key):
 		var hit: Array = _base_cache[key]
 		w.base_land = (hit[0] as PackedFloat32Array).duplicate()
 		w.relief_low = (hit[1] as PackedFloat32Array).duplicate()
 		w.relief_detail = (hit[2] as PackedFloat32Array).duplicate()
-		w.base_forest = (hit[3] as PackedFloat32Array).duplicate()
+		w.forest_potential = (hit[3] as PackedFloat32Array).duplicate()
 		w.erosion_alpine = (hit[4] as PackedFloat32Array).duplicate()
 		w.erosion_hills = (hit[5] as PackedFloat32Array).duplicate()
 		w.erosion_alpine_fine = (hit[6] as PackedFloat32Array).duplicate()
+		w.base_forest = (hit[7] as PackedFloat32Array).duplicate()
 		_base_order.erase(key)
 		_base_order.append(key)
 		return
-	evaluate_base(w)
-	_base_cache[key] = [w.base_land.duplicate(), w.relief_low.duplicate(), w.relief_detail.duplicate(), w.base_forest.duplicate(),
-		w.erosion_alpine.duplicate(), w.erosion_hills.duplicate(), w.erosion_alpine_fine.duplicate()]
+	if _exact_region(w).is_empty():
+		evaluate_base(w)
+		_apply_coarser_regions(w)
+	var regions := _same_scale_regions(w)
+	if not regions.is_empty():
+		_apply_regions(w, regions)
+	finish_forest(w)
+	if private_caches:
+		return
+	_base_cache[key] = [w.base_land.duplicate(), w.relief_low.duplicate(), w.relief_detail.duplicate(), w.forest_potential.duplicate(),
+		w.erosion_alpine.duplicate(), w.erosion_hills.duplicate(), w.erosion_alpine_fine.duplicate(), w.base_forest.duplicate()]
 	_base_order.append(key)
 	while _base_order.size() > BASE_CACHE_SIZE:
 		_base_cache.erase(_base_order.pop_front())
+
+
+## Stand der Erzeugung für einen Rahmen: alles, was die Grunddaten dort bestimmt (Ausgangswerte,
+## Grundform, Größe, Schutz). Wird beim Anlegen einer Region mitgespeichert; stimmt er später noch,
+## ergibt die Erzeugung dort genau die gespeicherten Daten.
+func base_fingerprint(cx: float, cy: float, size: float, res: int) -> String:
+	var w := TerrainWindow.new(cx, cy, size, 2)
+	w.cell = size / float(res - 1)
+	var protects := []
+	for stroke in continent["strokes"]:
+		if stroke["tool"] == "protect" and touches(w, stroke):
+			protects.append(stroke)
+	return canonical([RESULT_VERSION, int(continent["seed"]), int(continent.get("scatter_seed", 0)),
+		str(continent.get("base", "")), base_scale, float(continent["size_km"]), protects]).sha256_text()
+
+
+## Erzeugung im Raster einer Region (für die Angleichung feinerer Ausschnitte), nach Stand gemerkt.
+const GENERATED_CACHE_SIZE := 8
+static var _generated := {}
+static var _generated_order: Array = []
+
+
+func _generated_region_base(data: Dictionary) -> TerrainWindow:
+	var key := base_fingerprint(data["cx"], data["cy"], data["size"], data["res"]) + "|" + canonical([data["cx"], data["cy"], data["size"], data["res"]])
+	if private_caches and _own_generated.has(key):
+		return _own_generated[key]
+	if not private_caches and _generated.has(key):
+		_generated_order.erase(key)
+		_generated_order.append(key)
+		return _generated[key]
+	var g := TerrainWindow.new(float(data["cx"]), float(data["cy"]), float(data["size"]), int(data["res"]))
+	g.climate = climate
+	g.extent_half = continent["size_km"] * 500.0
+	for stroke in continent["strokes"]:
+		if stroke["tool"] == "protect" and touches(g, stroke):
+			apply_stroke(g, stroke)
+	evaluate_base(g)
+	if private_caches:
+		_own_generated[key] = g
+		return g
+	_generated[key] = g
+	_generated_order.append(key)
+	while _generated_order.size() > GENERATED_CACHE_SIZE:
+		_generated.erase(_generated_order.pop_front())
+	return g
+
+
+## Ausschnitte feiner als eine gespeicherte Region folgen deren Daten: Erzeugung im eigenen Raster
+## plus (gespeicherte Regionsdaten − Erzeugung im Regionsraster). Stimmt der Stand der Erzeugung mit
+## dem beim Anlegen überein, ist der Unterschied null und es wird nichts gerechnet; nach einer neuen
+## Variante, einem Programmwechsel oder einer Skalierung behält die Region so ihre Geografie, und die
+## feineren Ausschnitte ergänzen nur das Kleinere.
+func _apply_coarser_regions(w: TerrainWindow) -> void:
+	# Gröbere Regionen über diesem Ausschnitt (grob nach fein) und ob ihr Erzeugungsstand abweicht.
+	var coarser := []
+	var any_stale := false
+	for data in region_data:
+		var region_cell: float = float(data["size"]) / float(int(data["res"]) - 1)
+		if region_cell <= w.cell * 1.001 or not _overlaps(w, data):
+			continue
+		var stale := str(data.get("basis", "")) != base_fingerprint(data["cx"], data["cy"], data["size"], data["res"])
+		coarser.append({"data": data, "stale": stale, "gen": _generated_region_base(data) if stale else null})
+		any_stale = any_stale or stale
+	if not any_stale:
+		return
+	# Geschichtet, nicht addiert: Je Punkt gilt die feinste Region (ihre Daten enthalten die gröberen
+	# schon); eine Region mit unverändertem Stand deckt mit Unterschied null. Gröbere füllen nur, wo
+	# die feineren zum Rand hin ausblenden.
+	var res := w.res
+	var fields := {}
+	for layer in RegionStore.LAYERS:
+		fields[layer] = w.get(layer)
+	for j in res:
+		var y := w.y_at(j)
+		for i in res:
+			var x := w.x_at(i)
+			var rest := 1.0
+			var k := j * res + i
+			for ci in range(coarser.size() - 1, -1, -1):
+				var entry: Dictionary = coarser[ci]
+				var data: Dictionary = entry["data"]
+				var wgt := RegionStore.weight(data, x, y)
+				if wgt <= 0.0:
+					continue
+				if entry["stale"]:
+					var g: TerrainWindow = entry["gen"]
+					for layer in RegionStore.LAYERS:
+						var diff := RegionStore.bilinear(data["layers"][layer], data["res"], x, y, data["cx"], data["cy"], data["size"]) \
+							- RegionStore.bilinear(g.get(layer), data["res"], x, y, data["cx"], data["cy"], data["size"])
+						var field: PackedFloat32Array = fields[layer]
+						field[k] += diff * wgt * rest
+						fields[layer] = field
+				rest *= 1.0 - wgt
+				if rest <= 0.0:
+					break
+	for layer in RegionStore.LAYERS:
+		w.set(layer, fields[layer])
 
 
 ## Kann der Strich diesen Ausschnitt überhaupt berühren? (Spart die Arbeit für alle anderen.)
@@ -213,7 +755,7 @@ func evaluate_base(w: TerrainWindow) -> void:
 	var land := w.base_land
 	var low := w.relief_low
 	var detail := w.relief_detail
-	var forest := w.base_forest
+	var forest := w.forest_potential
 	var alpine := w.erosion_alpine
 	var alpine_fine := w.erosion_alpine_fine
 	var hills := w.erosion_hills
@@ -256,6 +798,21 @@ func evaluate_base(w: TerrainWindow) -> void:
 	w.base_land = land
 	w.relief_low = low
 	w.relief_detail = detail
+	w.forest_potential = forest
+
+
+## Waldanlage nach Klima: aus der Anlage ohne Klima und der jetzigen Trockenheit.
+static func forest_from_potential(potential: float, dryness: float) -> float:
+	return smoothstep(0.0, 0.22, potential - dryness * 0.5)
+
+
+## base_forest aus forest_potential und dem Klima dieses Kontinents.
+func finish_forest(w: TerrainWindow) -> void:
+	var dryness: float = climate["dryness"]
+	var potential := w.forest_potential
+	var forest := w.base_forest
+	for k in potential.size():
+		forest[k] = forest_from_potential(potential[k], dryness)
 	w.base_forest = forest
 
 
@@ -306,7 +863,7 @@ func _base_row(j: int, w: TerrainWindow) -> void:
 	_mutex.unlock()
 
 
-## Erzeugte Grundlage an einem Punkt: (Landanteil, grobes Relief, feines Relief, Wald).
+## Erzeugte Grundlage an einem Punkt: (Landanteil, grobes Relief, feines Relief, Waldanlage ohne Klima).
 ## Bei gezeichneter Grundform gibt es keinen Fleck – Land entsteht nur aus Formen und Pinseln;
 ## Küstendetail, sanftes Relief und Wald wirken trotzdem überall (dort, wo Land ist).
 func sample_base(x: float, y: float, cell: float, half: float, dryness: float, set: Dictionary) -> Vector4:
@@ -349,8 +906,8 @@ func sample_base(x: float, y: float, cell: float, half: float, dryness: float, s
 	var f := fn.get_noise_2d(fx / 110000.0, fy / 110000.0) * 0.4 \
 		+ _bands(fn, fx, fy, cell, 30000.0, 8, 0.36, 0.6, 0.0, false).x
 	f -= maxf(low - 300.0, 0.0) / 3000.0
-	var forest := smoothstep(0.0, 0.22, f + 0.1 - dryness * 0.5)
-	return Vector4(land, low, detail, forest)
+	# Waldanlage ohne Klima; die Trockenheit wirkt erst in forest_from_potential.
+	return Vector4(land, low, detail, f + 0.1)
 
 
 ## Gebirgsgürtel der erzeugten Grundform: entlang der Nulllinien eines großräumigen Rauschens

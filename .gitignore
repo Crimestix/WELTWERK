@@ -65,3 +65,6 @@ desktop.ini
 /docs/aufnahme/**/frames/
 /docs/aufnahme/**/*.avi
 /docs/aufnahme/**/welt.json
+
+# Daten der Detailregionen (gehören zur Weltdatei, nie einchecken)
+*_regionen/

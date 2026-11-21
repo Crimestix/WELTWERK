@@ -117,7 +117,12 @@ func resize_command(continent_id: String, new_size_km: float, old_size_km: float
 		new_strokes.append(Stroke.scaled(stroke, factor))
 	var new_regions := []
 	for region in c["regions"]:
-		new_regions.append({"cx": region["cx"] * factor, "cy": region["cy"] * factor, "size": region["size"] * factor})
+		# Detailregionen behalten Kennung und Daten; ihre Lage wächst mit (die Daten werden gestreckt).
+		var scaled_region: Dictionary = (region as Dictionary).duplicate(true)
+		scaled_region["cx"] = region["cx"] * factor
+		scaled_region["cy"] = region["cy"] * factor
+		scaled_region["size"] = region["size"] * factor
+		new_regions.append(scaled_region)
 	return {"kind": "resize", "continent": continent_id, "old": old_size_km, "new": new_size_km,
 		"old_strokes": (c["strokes"] as Array).duplicate(true), "new_strokes": new_strokes,
 		"old_regions": (c["regions"] as Array).duplicate(true), "new_regions": new_regions}
@@ -241,16 +246,48 @@ func _apply(command: Dictionary, forward: bool) -> void:
 		"resize":
 			var c := continent(command["continent"])
 			var side := "new" if forward else "old"
+			var factor: float = float(command[side]) / float(c["size_km"])
+			var other := "old" if forward else "new"
+			var regions := (command[side + "_regions"] as Array).duplicate(true)
+			# Detailregionen entstehen außerhalb des Verlaufs (beim Vertiefen): Die seither angelegten
+			# bleiben erhalten und wachsen mit, statt vom gemerkten Stand verdrängt zu werden. Sie
+			# werden in beiden gemerkten Ständen nachgetragen (je Kennung einmal), damit weitere
+			# Rückgängig/Wiederholen sie weder verlieren noch verdoppeln.
+			var known := {}
+			for r in regions:
+				if (r as Dictionary).has("id"):
+					known[r["id"]] = true
+			var known_other := {}
+			for r in command[other + "_regions"]:
+				if (r as Dictionary).has("id"):
+					known_other[r["id"]] = true
+			for r in c["regions"]:
+				var rid: String = str(r.get("id", ""))
+				if not (r as Dictionary).has("checksum") or rid == "" or known.has(rid):
+					continue
+				known[rid] = true
+				var kept: Dictionary = (r as Dictionary).duplicate(true)
+				kept["cx"] = float(r["cx"]) * factor
+				kept["cy"] = float(r["cy"]) * factor
+				kept["size"] = float(r["size"]) * factor
+				regions.append(kept)
+				(command[side + "_regions"] as Array).append(kept.duplicate(true))
+				if not known_other.has(rid):
+					known_other[rid] = true
+					(command[other + "_regions"] as Array).append((r as Dictionary).duplicate(true))
 			c["size_km"] = command[side]
 			c["strokes"] = (command[side + "_strokes"] as Array).duplicate(true)
-			c["regions"] = (command[side + "_regions"] as Array).duplicate(true)
+			c["regions"] = regions
 		"add_continent":
 			if forward:
 				continents.append((command["data"] as Dictionary).duplicate(true))
 			else:
+				# Stand beim Entfernen merken (Detailregionen entstehen außerhalb des Verlaufs).
+				command["data"] = (continents[index_of(command["data"]["id"])] as Dictionary).duplicate(true)
 				continents.remove_at(index_of(command["data"]["id"]))
 		"remove_continent":
 			if forward:
+				command["data"] = (continents[index_of(command["data"]["id"])] as Dictionary).duplicate(true)
 				continents.remove_at(index_of(command["data"]["id"]))
 			else:
 				continents.insert(mini(command["index"], continents.size()), (command["data"] as Dictionary).duplicate(true))
@@ -265,6 +302,35 @@ func _apply(command: Dictionary, forward: bool) -> void:
 
 
 # --- Navigation (kein Befehl: gehört nicht zum Rückgängig-Verlauf) -----------------------------
+
+## Gespeicherte Detailregion an dieser Stelle (gleiche Größe, Mitte innerhalb eines Viertels der
+## Größe), oder {} – Regionen mit Daten tragen "id" und "checksum".
+func region_near(continent_id: String, cx: float, cy: float, size: float) -> Dictionary:
+	var c := continent(continent_id)
+	if c.is_empty():
+		return {}
+	for r in c["regions"]:
+		if r.has("checksum") and is_equal_approx(float(r["size"]), size) \
+				and absf(float(r["cx"]) - cx) < size * 0.25 and absf(float(r["cy"]) - cy) < size * 0.25:
+			return r
+	return {}
+
+
+## Detailregion eintragen (Daten liegen schon in der Regionsdatei). Ein bloßer Rahmen derselben
+## Stelle wird dabei ersetzt. Kein Befehl: Regionen sind Ergebnis des Vertiefens, kein Rückgängig-Schritt.
+func add_region(continent_id: String, region: Dictionary) -> void:
+	var c := continent(continent_id)
+	if c.is_empty():
+		return
+	var regions: Array = c["regions"]
+	for k in range(regions.size() - 1, -1, -1):
+		var r: Dictionary = regions[k]
+		if not r.has("checksum") and is_equal_approx(float(r["size"]), float(region["size"])) \
+				and absf(float(r["cx"]) - float(region["cx"])) < float(region["size"]) * 0.25 \
+				and absf(float(r["cy"]) - float(region["cy"])) < float(region["size"]) * 0.25:
+			regions.remove_at(k)
+	regions.append(region.duplicate(true))
+
 
 ## Merkt sich einen vertieften Ausschnitt, damit er in gröberen Ansichten als Rahmen erscheint.
 func remember_region(continent_id: String, cx: float, cy: float, size: float) -> void:

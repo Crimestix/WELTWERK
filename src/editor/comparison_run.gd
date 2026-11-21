@@ -518,6 +518,8 @@ func _edit_shapes(dir: String) -> void:
 	var handle: Vector2 = editor._screen_of(coast)
 	await _drag(handle, handle - (editor._screen_of(coast + inward * 1000.0) - handle).normalized() * 50.0)
 	var region_after: Dictionary = editor.continent()["strokes"][0]
+	print("Vertiefter Ausschnitt: gewählt %s, Bearbeitungen %d → %d, Form verändert %s, Regionen %d" % [region_selected, history,
+		doc._undo.size(), not ShapeEdit.same_outline(region_after, outline), editor.continent().get("regions", []).size()])
 	checks["Im vertieften Ausschnitt wählbar und veränderbar"] = region_selected and doc._undo.size() == history + 1 \
 		and not ShapeEdit.same_outline(region_after, outline)
 	editor._undo()

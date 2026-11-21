@@ -35,6 +35,9 @@ var base_land := PackedFloat32Array()
 var relief_low := PackedFloat32Array()
 var relief_detail := PackedFloat32Array()
 var base_forest := PackedFloat32Array()
+## Waldanlage ohne Klima (base_forest = Anlage nach der jetzigen Trockenheit). Gespeichert in
+## Detailregionen, damit deren Wald einer späteren Klimaänderung folgt.
+var forest_potential := PackedFloat32Array()
 ## Geografisches Erosionsrelief um die Mitte (−0,5 … +0,5, ErosionField): Gebirge in großer Form
 ## (Massive, Haupttäler) und feineren Tälern/Rinnen, Vorberge.
 var erosion_alpine := PackedFloat32Array()
@@ -75,6 +78,7 @@ func _init(p_cx: float, p_cy: float, p_size: float, p_res: int) -> void:
 	relief_low.resize(n)
 	relief_detail.resize(n)
 	base_forest.resize(n)
+	forest_potential.resize(n)
 	erosion_alpine.resize(n)
 	erosion_alpine_fine.resize(n)
 	erosion_hills.resize(n)
