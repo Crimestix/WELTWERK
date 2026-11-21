@@ -1,0 +1,15 @@
+# Godot-Textdateien immer mit LF, damit Windows und macOS dieselben Dateien sehen.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.exr binary
+*.hdr binary
+*.glb binary
+*.ttf binary
+*.otf binary
+*.woff2 binary
+*.ogg binary
+*.wav binary

@@ -1,0 +1,63 @@
+; Engine configuration file.
+; Weltwerk – visueller Kampagneneditor (Arbeitsname).
+
+config_version=5
+
+[application]
+
+config/name="Weltwerk"
+config/description="Visueller Kampagneneditor für Elaris"
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.7", "Forward Plus")
+config/icon="res://icon.svg"
+
+[display]
+
+window/size/viewport_width=1440
+window/size/viewport_height=900
+
+[input]
+
+camera_forward={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":87), Object(InputEventKey,"physical_keycode":4194320)]
+}
+camera_back={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":83), Object(InputEventKey,"physical_keycode":4194322)]
+}
+camera_left={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":65), Object(InputEventKey,"physical_keycode":4194319)]
+}
+camera_right={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":68), Object(InputEventKey,"physical_keycode":4194321)]
+}
+camera_zoom_in={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"keycode":43), Object(InputEventKey,"keycode":4194437)]
+}
+camera_zoom_out={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"keycode":45), Object(InputEventKey,"keycode":4194435)]
+}
+camera_fast={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":4194325)]
+}
+camera_reset={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":4194317)]
+}
+toggle_help={
+"deadzone": 0.2,
+"events": [Object(InputEventKey,"physical_keycode":4194332)]
+}
+
+[rendering]
+
+renderer/rendering_method="forward_plus"
+anti_aliasing/quality/msaa_3d=1
+lights_and_shadows/directional_shadow/size=4096
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=2

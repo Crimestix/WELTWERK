@@ -1,0 +1,32 @@
+# Godot
+.godot/
+.import/
+*.translation
+mono_crash.*.json
+export_credentials.cfg
+
+# Erzeugte Programme
+/build/
+/export/
+
+# Spielstände, Kampagnen, Sicherungen, Schlüssel – nie einchecken
+/saves/
+/campaigns/
+/backups/
+/Sicherungen/
+*.bak
+*.backup
+*.key
+*.pem
+*.p12
+*.keystore
+.env
+.env.*
+
+# System
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Lokale Claude-Einstellungen
+.claude/settings.local.json
