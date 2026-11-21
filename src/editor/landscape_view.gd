@@ -419,6 +419,9 @@ func _finish_line() -> void:
 		return
 	# Rand: sichtbar weich, aber im Verhältnis zum Ausschnitt schmal.
 	var edge := maxf(window.size * 0.012, window.cell * 1.5)
+	# Von Hand gezogene Umrisse sind sehr dicht; vereinfacht bleiben sie gleich, haben aber
+	# handliche Punkte zum späteren Umformen.
+	line = ShapeEdit.simplified_outline(line, window.size * 0.0018)
 	stroke_finished.emit(Stroke.create_shape(t == "shape_add", line, edge))
 
 

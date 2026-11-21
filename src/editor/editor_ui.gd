@@ -846,6 +846,12 @@ func _flash(text: String, seconds: float, notice: bool) -> void:
 		_hint_panel.visible = false
 		return
 	_hint_label.text = text
+	# Lange Hinweise umbrechen statt über den Bildrand hinauszulaufen.
+	var font := _hint_label.get_theme_font("font")
+	var wide := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 14).x > 720.0
+	_hint_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART if wide else TextServer.AUTOWRAP_OFF
+	_hint_label.custom_minimum_size.x = 720.0 if wide else 0.0
+	_hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_hint_label.add_theme_color_override("font_color", PARCHMENT if notice else PARCHMENT_DIM)
 	_hint_panel.add_theme_stylebox_override("panel", _notice_style if notice else _hint_style)
 	_hint_is_notice = notice

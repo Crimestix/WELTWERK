@@ -36,7 +36,7 @@ const HANDLE_FILL := Color(0.98, 0.93, 0.80, 1.0)
 const HANDLE_HOT := Color(1.0, 0.80, 0.35, 1.0)
 const HANDLE_RIM := Color(0.16, 0.11, 0.06, 0.9)
 
-const HINT_SELECTED := "Form gewählt: Ziehen verschiebt · Punkte ziehen formt um (Alt: nur der Punkt) · Doppelklick auf den Rand fügt einen Punkt ein · Entf löscht · Umschalt+Mausrad skaliert · Strg+Mausrad dreht · Esc hebt die Wahl auf"
+const HINT_SELECTED := "Form gewählt: ziehen verschiebt, Punkte ziehen formt um, Doppelklick auf den Rand fügt einen Punkt ein, Entf löscht. Umschalt + Mausrad: Größe, Strg + Mausrad: Drehung."
 const HINT_NOTHING := "Hier liegt keine gezeichnete Landform. Formen entstehen mit „Land zeichnen“ und „Land wegschneiden“."
 
 var view: LandscapeView

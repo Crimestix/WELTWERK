@@ -196,3 +196,21 @@ func test_save_load_after_edit() -> void:
 	check_equal(strokes.size(), 2, "zwei Bearbeitungen")
 	check(ShapeEdit.same_outline(strokes[0], edited, 1e-6), "veränderte Form exakt gespeichert")
 	check_equal(ShapeEdit.shape_at(loaded.continents[0], 40000.0, 0.0), 0, "Form nach dem Laden wählbar")
+
+
+func test_simplified_outline_keeps_shape() -> void:
+	# Dicht gezeichneter Kreis: vereinfacht weniger Punkte, Form bleibt innerhalb der Toleranz.
+	var dense := ShapeEdit.outline(_circle(Vector2(1000.0, -2000.0), 100000.0, 400))
+	var simple := ShapeEdit.simplified_outline(dense, 300.0)
+	check(simple.size() < dense.size() / 3, "deutlich weniger Punkte (%d statt %d)" % [simple.size(), dense.size()])
+	check(simple.size() >= 8, "Kreis bleibt rund (%d Punkte)" % simple.size())
+	var worst := 0.0
+	for p in dense:
+		var best := INF
+		for i in simple.size():
+			var q := Geometry2D.get_closest_point_to_segment(p, simple[i], simple[(i + 1) % simple.size()])
+			best = minf(best, q.distance_to(p))
+		worst = maxf(worst, best)
+	check(worst <= 300.0 + 1e-3, "Abweichung höchstens die Toleranz (%.1f m)" % worst)
+	var square := ShapeEdit.outline(_square(Vector2.ZERO, 50.0))
+	check(ShapeEdit.simplified_outline(square, 1000.0).size() >= 3, "nie weniger als drei Punkte")

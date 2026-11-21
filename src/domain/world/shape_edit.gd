@@ -203,6 +203,59 @@ static func nearest_edge(stroke: Dictionary, p: Vector2, max_dist: float) -> Arr
 
 
 ## Gleicher Umriss? (Punktweise, mit Toleranz in Metern.)
+## Geschlossenen Umriss vereinfachen (Douglas-Peucker): Punkte, die weniger als tolerance (m)
+## von der Verbindung ihrer Nachbarn abweichen, fallen weg. Mindestens drei Punkte bleiben.
+static func simplified_outline(poly: PackedVector2Array, tolerance: float) -> PackedVector2Array:
+	var n := poly.size()
+	if n <= 4 or tolerance <= 0.0:
+		return poly
+	# Am weitesten vom ersten Punkt entfernter Punkt teilt den Ring in zwei offene Züge.
+	var far := 0
+	var best := -1.0
+	for i in n:
+		var d := poly[i].distance_squared_to(poly[0])
+		if d > best:
+			best = d
+			far = i
+	var keep := PackedByteArray()
+	keep.resize(n)
+	keep.fill(0)
+	keep[0] = 1
+	keep[far] = 1
+	_simplify_run(poly, 0, far, tolerance, keep)
+	_simplify_run(poly, far, n, tolerance, keep)
+	var out := PackedVector2Array()
+	for i in n:
+		if keep[i] == 1:
+			out.append(poly[i])
+	return out if out.size() >= 3 else poly
+
+
+## Ein offener Zug von a bis b (b == n steht für den Ringschluss am ersten Punkt).
+static func _simplify_run(poly: PackedVector2Array, a: int, b: int, tolerance: float, keep: PackedByteArray) -> void:
+	var stack := [[a, b]]
+	var n := poly.size()
+	while not stack.is_empty():
+		var run: Array = stack.pop_back()
+		var i0: int = run[0]
+		var i1: int = run[1]
+		if i1 - i0 < 2:
+			continue
+		var p0 := poly[i0]
+		var p1 := poly[i1 % n]
+		var worst := -1.0
+		var at := -1
+		for i in range(i0 + 1, i1):
+			var d := Geometry2D.get_closest_point_to_segment(poly[i], p0, p1).distance_to(poly[i])
+			if d > worst:
+				worst = d
+				at = i
+		if worst > tolerance:
+			keep[at] = 1
+			stack.append([i0, at])
+			stack.append([at, i1])
+
+
 static func same_outline(a: Dictionary, b: Dictionary, tolerance: float = 0.001) -> bool:
 	var pa := outline(a)
 	var pb := outline(b)
