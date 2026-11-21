@@ -122,7 +122,7 @@ func run(dir: String) -> void:
 		await _ground_stroke(chain)
 	for chain in RIVERS:
 		editor._use_tool("river")
-		editor.ui.set_brush(0.006, 0.5)
+		editor.ui.set_brush(0.005, 0.5)
 		await _screen_line(_screen_points(chain), false)
 	for p in LAKES:
 		editor._use_tool("lake")

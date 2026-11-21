@@ -16,6 +16,10 @@ const SHADER := preload("res://src/editor/landscape.gdshader")
 const DETAIL_SHADER := preload("res://src/editor/landscape_detail.gdshader")
 const WATER_SHADER := preload("res://src/world/water.gdshader")
 const CLEAR_WATER_SHADER := preload("res://src/target/water_clear.gdshader")
+const SEA_SHADER := preload("res://src/editor/sea.gdshader")
+const RIVER_SHADER := preload("res://src/editor/river.gdshader")
+## Mindestbreite eines Flusses auf der Karte (Anteil der Ausschnittbreite, halbe Breite).
+const RIVER_MIN_HALF := 0.0011
 ## Bäume als einzelne Modelle erst ab diesem Ausschnitt (m) – darüber zeigt die Farbe den Wald.
 const TREES_BELOW := 1700.0
 ## Ab hier Aussehen wie das Zielbild (Fototexturen, klares Wasser).
@@ -24,9 +28,10 @@ const DETAIL_BELOW := 4200.0
 const DETAILED_TREES_BELOW := 620.0
 
 
-## Überhöhung je Ausschnittgröße (nur Darstellung): 1 im Detail, bis 8 auf Kontinentebene.
+## Überhöhung je Ausschnittgröße (nur Darstellung): 1 im Detail, bis 5,5 auf Kontinentebene
+## (stärker wirkt flaches Hügelland wie eine Buckelpiste).
 static func exaggeration_for(size_m: float) -> float:
-	return clampf(0.8 * pow(size_m / 2000.0, 0.4), 1.0, 8.0)
+	return clampf(0.8 * pow(size_m / 2000.0, 0.4), 1.0, 5.5)
 
 var window: TerrainWindow
 var sampler: TerrainSampler
@@ -42,6 +47,8 @@ var tool := "navigate":
 		_cancel_line()
 		if _material and value == "navigate":
 			_material.set_shader_parameter("brush", Vector3(0.0, 0.0, -1.0))
+		if _material:
+			_material.set_shader_parameter("show_protect", value == "protect")
 var brush_radius_m := 100.0
 var brush_strength := 1.0
 ## Ausgangswert für die nächste erzeugende Bearbeitung (vom Editor fest abgeleitet).
@@ -60,6 +67,11 @@ var _coarse_material: ShaderMaterial
 var _detail_material: ShaderMaterial
 var _water_material: ShaderMaterial
 var _clear_water_material: ShaderMaterial
+var _sea_material: ShaderMaterial
+var _lake_material: ShaderMaterial
+var _river_material: ShaderMaterial
+## Flüsse als Bänder und Seeflächen (nur grobe Ausschnitte).
+var _inland_water: Node3D
 var _context: MeshInstance3D
 var _context_material: ShaderMaterial
 var _context_texture: ImageTexture
@@ -78,6 +90,10 @@ var _line := PackedVector2Array()
 var _drawing_line := false
 var _line_preview: MeshInstance3D
 var _lin_texture: ImageTexture
+## Inhalt der Datentextur (RGBA-Kommazahlen je Rasterpunkt); beim Malen nur das geänderte Rechteck.
+var _data := PackedFloat32Array()
+var _height_low := 0.0
+var _height_high := 0.0
 
 
 func _ready() -> void:
@@ -124,9 +140,20 @@ func _ready() -> void:
 	_water_material.set_shader_parameter("depth_fade", 2.5)
 	_clear_water_material = ShaderMaterial.new()
 	_clear_water_material.shader = CLEAR_WATER_SHADER
-	plane.material = _water_material
+	_sea_material = ShaderMaterial.new()
+	_sea_material.shader = SEA_SHADER
+	_lake_material = ShaderMaterial.new()
+	_lake_material.shader = SEA_SHADER
+	_lake_material.set_shader_parameter("is_lake", true)
+	_river_material = ShaderMaterial.new()
+	_river_material.shader = RIVER_SHADER
+	plane.material = _sea_material
 	_water.mesh = plane
 	add_child(_water)
+
+	_inland_water = Node3D.new()
+	_inland_water.name = "InlandWater"
+	add_child(_inland_water)
 
 	_trees = Node3D.new()
 	_trees.name = "Trees"
@@ -186,7 +213,14 @@ func show_window(w: TerrainWindow, p_sampler: TerrainSampler, regions: Array, pa
 		# Wasser in Darstellungseinheiten: Tiefen und Schluckweg auf Meter umrechnen.
 		_clear_water_material.set_shader_parameter("deep_depth", 7.0 * height_scale)
 		_clear_water_material.set_shader_parameter("absorption", Vector3(0.42, 0.11, 0.07) / height_scale)
-	(_water.mesh as PlaneMesh).material = _clear_water_material if detail else _water_material
+	(_water.mesh as PlaneMesh).material = _clear_water_material if detail else _sea_material
+	for m in [_sea_material, _lake_material]:
+		m.set_shader_parameter("data_lin", _lin_texture)
+		m.set_shader_parameter("res", w.res)
+		m.set_shader_parameter("plane_size", PLANE)
+		m.set_shader_parameter("height_scale", height_scale)
+		m.set_shader_parameter("meadow_origin", Vector2(w.cx, -w.cy))
+		m.set_shader_parameter("meadow_scale", units_per_m)
 	_material.set_shader_parameter("res", w.res)
 	_material.set_shader_parameter("plane_size", PLANE)
 	_material.set_shader_parameter("height_scale", height_scale)
@@ -195,7 +229,9 @@ func show_window(w: TerrainWindow, p_sampler: TerrainSampler, regions: Array, pa
 	_material.set_shader_parameter("dryness", w.climate["dryness"])
 	_material.set_shader_parameter("canopy", 0.0 if w.size <= TREES_BELOW else 1.0)
 	_material.set_shader_parameter("show_marks", show_marks)
+	_material.set_shader_parameter("show_protect", tool == "protect")
 	_rebuild_field()
+	_build_inland_water(detail)
 	_build_trees()
 	_build_details()
 	_build_frames(regions)
@@ -441,7 +477,7 @@ func _apply_new_dabs(first: int) -> void:
 	var rect: Rect2i = result[0]
 	if rect.size != Vector2i.ZERO:
 		window.compose_rect(rect.position.x - 1, rect.position.y - 1, rect.end.x + 1, rect.end.y + 1)
-		_upload()
+		_upload(rect.grow(1))
 
 
 func _finish_stroke() -> void:
@@ -455,10 +491,25 @@ func _finish_stroke() -> void:
 
 # --- Aufbau --------------------------------------------------------------------------------
 
-func _upload() -> void:
-	var n := window.res * window.res
+## Datentextur hochladen; rect: nur dieser Teil hat sich geändert (beim Malen), sonst alles.
+func _upload(rect: Rect2i = Rect2i()) -> void:
+	var res := window.res
+	var n := res * res
+	var full := rect.size == Vector2i.ZERO or _data.size() != n * 4
+	if full:
+		rect = Rect2i(0, 0, res, res)
+		_data.resize(n * 4)
+		_height_low = 0.0
+		_height_high = 0.0
+	rect = rect.intersection(Rect2i(0, 0, res, res))
+	_fill_data(window, _data, rect)
 	var h := window.height
-	var image := _data_image(window)
+	for j in range(rect.position.y, rect.end.y):
+		for i in range(rect.position.x, rect.end.x):
+			var v := h[j * res + i]
+			_height_low = minf(_height_low, v)
+			_height_high = maxf(_height_high, v)
+	var image := Image.create_from_data(res, res, false, Image.FORMAT_RGBAF, _data.to_byte_array())
 	if _texture == null:
 		_texture = ImageTexture.create_from_image(image)
 		_material.set_shader_parameter("data_tex", _texture)
@@ -473,13 +524,8 @@ func _upload() -> void:
 		_lin_texture.update(soft)
 	_material.set_shader_parameter("data_lin", _lin_texture)
 	# Grenzen für die Sichtbarkeitsprüfung (das Gitter wird erst im Shader gehoben).
-	var low := 0.0
-	var high := 0.0
-	for k in n:
-		low = minf(low, h[k])
-		high = maxf(high, h[k])
-	_ground.custom_aabb = AABB(Vector3(-PLANE * 0.5, low * height_scale - 1.0, -PLANE * 0.5),
-		Vector3(PLANE, (high - low) * height_scale + 2.0, PLANE))
+	_ground.custom_aabb = AABB(Vector3(-PLANE * 0.5, _height_low * height_scale - 1.0, -PLANE * 0.5),
+		Vector3(PLANE, (_height_high - _height_low) * height_scale + 2.0, PLANE))
 
 
 ## Umgebung neu zeigen (nach einer Bearbeitung, die über den Ausschnitt hinausreicht).
@@ -533,20 +579,27 @@ func _show_context(parent: TerrainWindow) -> void:
 ## Datentextur: R Höhe (m), G Wald, B Bearbeitungsmarke + 2 wo geschützt, A Tiefe eines
 ## Binnengewässers (m über dem Grund; 0 = keins).
 static func _data_image(w: TerrainWindow) -> Image:
-	var n := w.res * w.res
 	var data := PackedFloat32Array()
-	data.resize(n * 4)
+	data.resize(w.res * w.res * 4)
+	_fill_data(w, data, Rect2i(0, 0, w.res, w.res))
+	return Image.create_from_data(w.res, w.res, false, Image.FORMAT_RGBAF, data.to_byte_array())
+
+
+## Schreibt die Datentextur-Werte des Rechtecks in data (lokal geholt, einmal je Feld gelesen).
+static func _fill_data(w: TerrainWindow, data: PackedFloat32Array, rect: Rect2i) -> void:
+	var res := w.res
 	var h := w.height
 	var f := w.forest
 	var m := w.edit_marks
 	var p := w.protect
 	var lvl := w.water_level
-	for k in n:
-		data[k * 4] = h[k]
-		data[k * 4 + 1] = f[k]
-		data[k * 4 + 2] = m[k] + (2.0 if p[k] > 0.5 else 0.0)
-		data[k * 4 + 3] = maxf(lvl[k] - h[k], 0.0) if lvl[k] > 0.0 else 0.0
-	return Image.create_from_data(w.res, w.res, false, Image.FORMAT_RGBAF, data.to_byte_array())
+	for j in range(rect.position.y, rect.end.y):
+		for i in range(rect.position.x, rect.end.x):
+			var k := j * res + i
+			data[k * 4] = h[k]
+			data[k * 4 + 1] = f[k]
+			data[k * 4 + 2] = m[k] + (2.0 if p[k] > 0.5 else 0.0)
+			data[k * 4 + 3] = maxf(lvl[k] - h[k], 0.0) if lvl[k] > 0.0 else 0.0
 
 
 func _rebuild_field() -> void:
@@ -559,6 +612,131 @@ func _rebuild_field() -> void:
 		heights[k] = maxf(h[k], lvl[k]) * height_scale
 	field.heights = heights
 	_field = field
+
+
+## Flüsse als glatte Bänder und Seen als ebene Wasserflächen auf Höhe ihres Spiegels (nur in
+## groben Ausschnitten; fein zeigt das Gelände selbst klares Wasser). Gleiche Daten wie die
+## Auswertung: Lauf, Spiegel und Breite aus der Strichliste.
+func _build_inland_water(detail: bool) -> void:
+	for child in _inland_water.get_children():
+		child.queue_free()
+	if detail or sampler == null:
+		return
+	var rivers := ArrayMesh.new()
+	var any_river := false
+	for stroke in sampler.continent["strokes"]:
+		if not sampler.touches(window, stroke):
+			continue
+		if stroke["tool"] == "river":
+			any_river = _add_river_band(rivers, stroke) or any_river
+		elif stroke["tool"] == "lake":
+			_add_lake_surface(stroke)
+	if any_river:
+		var inst := MeshInstance3D.new()
+		inst.mesh = rivers
+		inst.material_override = _river_material
+		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_inland_water.add_child(inst)
+
+
+## Glatter Linienzug (Catmull-Rom, vier Zwischenpunkte je Abschnitt) mit Spiegelhöhe je Punkt.
+static func smooth_path(points: PackedVector2Array, levels: Array) -> Array:
+	var out := PackedVector2Array()
+	var out_levels := PackedFloat32Array()
+	var n := points.size()
+	for i in n - 1:
+		var p0 := points[maxi(i - 1, 0)]
+		var p1 := points[i]
+		var p2 := points[i + 1]
+		var p3 := points[mini(i + 2, n - 1)]
+		var l1: float = levels[i] if i < levels.size() else 0.0
+		var l2: float = levels[i + 1] if i + 1 < levels.size() else l1
+		for k in 4:
+			var t := k / 4.0
+			var t2 := t * t
+			var t3 := t2 * t
+			out.append(0.5 * ((2.0 * p1) + (-p0 + p2) * t + (2.0 * p0 - 5.0 * p1 + 4.0 * p2 - p3) * t2 + (-p0 + 3.0 * p1 - 3.0 * p2 + p3) * t3))
+			out_levels.append(lerpf(l1, l2, t))
+	out.append(points[n - 1])
+	out_levels.append(levels[n - 1] if n - 1 < levels.size() else 0.0)
+	return [out, out_levels]
+
+
+func _add_river_band(mesh: ArrayMesh, stroke: Dictionary) -> bool:
+	var count := Stroke.dab_count(stroke)
+	if count < 2:
+		return false
+	var raw := PackedVector2Array()
+	for i in count:
+		raw.append(Stroke.point(stroke, i))
+	var smooth := smooth_path(raw, stroke.get("heights", []))
+	var path: PackedVector2Array = smooth[0]
+	var levels: PackedFloat32Array = smooth[1]
+	var half_real: float = stroke["radius"] * units_per_m
+	var half_min := RIVER_MIN_HALF * PLANE
+	var total := 0.0
+	for i in range(1, path.size()):
+		total += path[i].distance_to(path[i - 1])
+	var verts := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var normals := PackedVector3Array()
+	var along := 0.0
+	var limit := PLANE * 0.5
+	for i in path.size():
+		var p := path[i]
+		if i > 0:
+			along += p.distance_to(path[i - 1])
+		var a := path[maxi(i - 1, 0)]
+		var b := path[mini(i + 1, path.size() - 1)]
+		var dir := (b - a).normalized()
+		var side := Vector2(-dir.y, dir.x)
+		# Von der Quelle zur Mündung breiter werdend.
+		var t := along / maxf(total, 1.0)
+		var half := maxf(half_real, half_min * (0.55 + 0.45 * t)) / units_per_m
+		var lv := levels[i]
+		for s in [-1.0, 1.0]:
+			var q: Vector2 = p + side * half * s
+			var ground := window.height_at(q.x, q.y) if window.contains(q.x, q.y) else lv
+			var h := maxf(maxf(lv, ground), 0.0)
+			var r := Vector3((q.x - window.cx) * units_per_m, h * height_scale, -(q.y - window.cy) * units_per_m)
+			r.x = clampf(r.x, -limit, limit)
+			r.z = clampf(r.z, -limit, limit)
+			verts.append(r)
+			uvs.append(Vector2(0.0 if s < 0.0 else 1.0, along))
+			normals.append(Vector3.UP)
+	var indices := PackedInt32Array()
+	for i in path.size() - 1:
+		var k := i * 2
+		indices.append_array([k, k + 2, k + 1, k + 1, k + 2, k + 3])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_INDEX] = indices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return true
+
+
+func _add_lake_surface(stroke: Dictionary) -> void:
+	var level: float = stroke.get("level", 0.0)
+	var r_eff := maxf(float(stroke["radius"]), window.cell * 0.75) * 1.12
+	for d in Stroke.dab_count(stroke):
+		var c := Stroke.point(stroke, d)
+		var center := Vector3((c.x - window.cx) * units_per_m, level * height_scale, -(c.y - window.cy) * units_per_m)
+		var disc := CylinderMesh.new()
+		disc.top_radius = r_eff * units_per_m
+		disc.bottom_radius = r_eff * units_per_m
+		disc.height = 0.001
+		disc.radial_segments = 64
+		disc.rings = 1
+		disc.cap_bottom = false
+		var inst := MeshInstance3D.new()
+		inst.mesh = disc
+		inst.position = center
+		inst.material_override = _lake_material
+		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_inland_water.add_child(inst)
 
 
 func _build_frames(regions: Array) -> void:

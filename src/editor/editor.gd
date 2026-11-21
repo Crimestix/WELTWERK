@@ -15,6 +15,8 @@ const FACTOR := 8.0
 const SMALLEST := 190.0
 ## Auflösung der Kontinentbilder auf dem Globus und in der Übersichtskarte.
 const GLOBE_RES := 129
+## Raster der Kontinentansicht (feiner als Regionen, die nur einen Ausschnitt zeigen).
+const CONTINENT_RES := 513
 
 @onready var landscape: LandscapeView = $Landscape
 @onready var camera_rig: StrategyCamera = $CameraRig
@@ -279,8 +281,31 @@ func open_continent(id: String) -> void:
 	levels = [{"cx": 0.0, "cy": 0.0, "size": continent()["size_km"] * 1000.0}]
 	_set_globe(false)
 	_show_level()
-	camera_rig.jump_to(Vector3.ZERO, camera_rig.max_distance * 0.9)
+	fit_continent_view()
 	_queue_view()
+
+
+## Kontinentansicht einpassen: das ganze Land füllt das Bild wie eine Karte (ohne Land: Mitte).
+func fit_continent_view() -> void:
+	var stats := globe_window(active_id).land_stats()
+	if stats["area_km2"] <= 0.0:
+		camera_rig.jump_to(Vector3.ZERO, camera_rig.max_distance * 0.9)
+		return
+	var lo: Vector2 = stats["min"]
+	var hi: Vector2 = stats["max"]
+	var cell := globe_window(active_id).cell
+	var center := (lo + hi) * 0.5
+	var extent := (hi - lo + Vector2(cell, cell) * 2.0) * landscape.units_per_m
+	var view := get_viewport().get_visible_rect().size
+	var cam := camera_rig.camera
+	var focus := Vector3((center.x - landscape.window.cx) * landscape.units_per_m, 0.0, -(center.y - landscape.window.cy) * landscape.units_per_m)
+	# Bildwinkel und Neigung hängen vom Abstand ab: in drei Schritten einpassen.
+	for k in 3:
+		var tan_half := tan(deg_to_rad(cam.fov * 0.5))
+		var pitch := deg_to_rad(camera_rig.current_pitch())
+		var by_width := extent.x * 1.12 / (view.x / view.y * 2.0 * tan_half)
+		var by_depth := extent.y * 1.18 * sin(pitch) / (2.0 * tan_half)
+		camera_rig.jump_to(focus, maxf(by_width, by_depth))
 
 
 func open_globe() -> void:
@@ -391,7 +416,8 @@ func _process(_delta: float) -> void:
 func _level_window(index: int) -> TerrainWindow:
 	var level: Dictionary = levels[index]
 	if level.get("window") == null:
-		level["window"] = sampler.window(level["cx"], level["cy"], level["size"])
+		# Kontinentebene feiner aufgelöst: Sie ist die Karte, auf der am meisten gestaltet wird.
+		level["window"] = sampler.window(level["cx"], level["cy"], level["size"], CONTINENT_RES if index == 0 else 257)
 	return level["window"]
 
 
@@ -406,6 +432,10 @@ func _show_level() -> void:
 	var w := _level_window(levels.size() - 1)
 	var parent := _level_window(levels.size() - 2) if levels.size() > 1 else null
 	landscape.continent_seed = continent()["seed"]
+	# Karte (grobe Ausschnitte): fast neutrales Licht, damit Farben wie auf einer Landkarte lesbar
+	# sind; nah die warme Abendsonne der Zielszene.
+	var sun: DirectionalLight3D = $Lighting/Sun
+	sun.light_color = Color(1.0, 0.93, 0.82) if current["size"] > LandscapeView.DETAIL_BELOW else Color(1.0, 0.8, 0.54)
 	landscape.show_window(w, sampler, continent()["regions"], parent)
 	ui.set_window_size(current["size"])
 	_on_brush(size_fraction, strength)
