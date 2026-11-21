@@ -57,6 +57,11 @@ var active := false:
 
 ## Gewählte Form (Listenplatz in der Strichliste) oder -1.
 var selected := -1
+## Kopie der gewählten Form und Zahl der Striche beim letzten Abgleich (Wahl folgt der Form).
+var _selected_copy := {}
+## Letzte Zeigerstelle (Bildschirm), für Tasten ohne eigene Position.
+var _mouse := Vector2.ZERO
+var _stroke_count := 0
 ## Form unter dem Mauszeiger oder -1; Punkt der gewählten Form unter dem Zeiger oder -1.
 var hovered := -1
 var hovered_vertex := -1
@@ -111,9 +116,21 @@ func refresh() -> void:
 		_continent_id = id
 		_cancel_drag()
 		_deselect()
+	# Die Wahl folgt der Form, nicht dem Listenplatz: Hat Rückgängig/Wiederholen einen Strich davor
+	# eingefügt oder entfernt, steht dieselbe Form jetzt an anderer Stelle.
+	var count: int = (_continent().get("strokes", []) as Array).size()
+	if selected >= 0 and not _selected_copy.is_empty() and not ShapeEdit.same_outline(_stroke(selected), _selected_copy, 1e-6):
+		var found := _find_outline(_selected_copy)
+		if found >= 0:
+			selected = found
+		elif count != _stroke_count:
+			_cancel_drag()
+			_deselect()
 	if selected >= 0 and not ShapeEdit.is_shape(_stroke(selected)):
 		_cancel_drag()
 		_deselect()
+	_selected_copy = _stroke(selected).duplicate(true) if selected >= 0 else {}
+	_stroke_count = count
 	if hovered >= 0 and not ShapeEdit.is_shape(_stroke(hovered)):
 		hovered = -1
 	hovered_vertex = -1
@@ -136,6 +153,8 @@ func select(index: int) -> void:
 func handle_input(event: InputEvent) -> void:
 	if not active or view == null or view.window == null:
 		return
+	if event is InputEventMouse:
+		_mouse = (event as InputEventMouse).position
 	if event is InputEventMouseMotion:
 		if _on_motion((event as InputEventMouseMotion).position, event.alt_pressed):
 			get_viewport().set_input_as_handled()
@@ -301,7 +320,11 @@ func _on_key(key: InputEventKey) -> bool:
 			if _mode != "" or selected < 0:
 				return false
 			var s := _stroke(selected)
+			# Punkt unter dem Zeiger frisch bestimmen (nach einer Änderung ist der gemerkte veraltet).
 			var vertex := hovered_vertex
+			var under: Variant = view._hit(_mouse)
+			if under != null:
+				vertex = ShapeEdit.nearest_vertex(s, view.to_continent(under), _pick_m(under))
 			if vertex >= 0:
 				if Stroke.dab_count(s) <= ShapeEdit.MIN_POINTS:
 					view.hint.emit("Eine Form braucht mindestens drei Punkte – Entf über der Fläche löscht die ganze Form.")
@@ -352,7 +375,17 @@ func _commit_wheel() -> void:
 func _deselect() -> void:
 	selected = -1
 	hovered_vertex = -1
+	_selected_copy = {}
 	_dirty = true
+
+
+## Listenplatz einer Form mit genau diesem Umriss, oder -1.
+func _find_outline(stroke: Dictionary) -> int:
+	var strokes: Array = _continent().get("strokes", [])
+	for i in range(strokes.size() - 1, -1, -1):
+		if ShapeEdit.is_shape(strokes[i]) and strokes[i]["tool"] == stroke.get("tool", "") 				and ShapeEdit.same_outline(strokes[i], stroke, 1e-6):
+			return i
+	return -1
 
 
 # --- Daten ---------------------------------------------------------------------------------

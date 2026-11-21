@@ -96,10 +96,14 @@ const NO_SETTINGS := ["navigate", "select", "shape_add", "shape_remove"]
 ## Werkzeuge ohne Stärke-Regler.
 const NO_STRENGTH := ["navigate", "select", "shape_add", "shape_remove", "lake", "river", "protect", "flatten"]
 const REROLL_TOOLS := ["gen_mountains", "gen_hills", "gen_islands", "gen_forest"]
+## Anfangsgröße (Reglerstellung 0–1) für Werkzeuge, die sonst zu grob begännen.
+const DEFAULT_SIZE := {"river": 0.4, "lake": 0.35}
 const HINT_SECONDS := 6.0
 const NOTICE_SECONDS := 5.0
 
 var _icons := {}
+## Größe und Stärke je Werkzeug (Reglerstellungen).
+var _tool_brush := {}
 var _breadcrumb: HBoxContainer
 var _crumbs: Array[Button] = []
 var _back_pill: Button
@@ -697,7 +701,7 @@ func select_tool(tool: String) -> void:
 
 ## Pinselregler setzen (Größe als Anteil des Ausschnitts, Stärke 0–1).
 func set_brush(fraction: float, strength: float) -> void:
-	_size_slider.set_value_no_signal(clampf(log(fraction / 0.005) / log(40.0), 0.0, 1.0))
+	_size_slider.set_value_no_signal(clampf(log(fraction / _size_base()) / log(40.0), 0.0, 1.0))
 	_strength_slider.set_value_no_signal(strength)
 	_emit_brush()
 
@@ -784,6 +788,12 @@ func _on_tool_button(tool: String) -> void:
 
 
 func _set_tool(tool: String, emit: bool) -> void:
+	# Jedes Werkzeug behält seine eigene Größe und Stärke (ein Fluss ist schmaler als ein Wald).
+	if _tool != tool:
+		_tool_brush[_tool] = Vector2(_size_slider.value, _strength_slider.value)
+		var saved: Vector2 = _tool_brush.get(tool, Vector2(DEFAULT_SIZE.get(tool, _size_slider.value), _strength_slider.value))
+		_size_slider.set_value_no_signal(saved.x)
+		_strength_slider.set_value_no_signal(saved.y)
 	_tool = tool
 	for t in _tool_buttons:
 		(_tool_buttons[t] as Button).set_pressed_no_signal(t == tool)
@@ -796,6 +806,7 @@ func _set_tool(tool: String, emit: bool) -> void:
 	_reroll.visible = tool in REROLL_TOOLS
 	if emit:
 		tool_selected.emit(tool)
+	_emit_brush()
 
 
 func _group_of(tool: String) -> String:
@@ -891,14 +902,20 @@ func _on_minimap_input(event: InputEvent) -> void:
 
 func _emit_brush() -> void:
 	var fraction := size_fraction()
-	_size_label.text = meters(fraction * _window_size)
+	# Beim Fluss zählt die ganze Breite (der Pinsel ist die halbe).
+	_size_label.text = meters(fraction * _window_size * (2.0 if _tool == "river" else 1.0))
 	_strength_label.text = "%d %%" % int(round(_strength_slider.value * 100.0))
 	brush_changed.emit(fraction, _strength_slider.value)
 
 
-## Pinselgröße als Anteil des Ausschnitts (0,5 % bis 20 %, logarithmisch).
+## Pinselgröße als Anteil des Ausschnitts (0,5 % bis 20 %, logarithmisch; Flüsse feiner:
+## halbe Breite 0,06 % bis 2,4 %, damit sie auf der Kontinentkarte schmal bleiben können).
 func size_fraction() -> float:
-	return 0.005 * pow(40.0, _size_slider.value)
+	return _size_base() * pow(40.0, _size_slider.value)
+
+
+func _size_base() -> float:
+	return 0.0006 if _tool == "river" else 0.005
 
 
 func _set_slider(key: String, value: float) -> void:

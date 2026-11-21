@@ -876,7 +876,8 @@ func _update_scale_bar() -> void:
 		return
 	var cam := camera_rig.camera
 	var center := get_viewport().get_visible_rect().size * 0.5
-	var ground := Plane(Vector3.UP, 0.0)
+	# In Höhe des Bodens am Blickpunkt messen (über hohem Land wäre Meereshöhe zu weit weg).
+	var ground := Plane(Vector3.UP, camera_rig.position.y)
 	var side := center + Vector2(40.0, 0.0)
 	var a: Variant = ground.intersects_ray(cam.project_ray_origin(center), cam.project_ray_normal(center))
 	var b: Variant = ground.intersects_ray(cam.project_ray_origin(side), cam.project_ray_normal(side))
