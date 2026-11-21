@@ -40,8 +40,10 @@ var tool := "navigate":
 	set(value):
 		tool = value
 		_cancel_line()
-		if _material and value == "navigate":
+		if _material and value in ["navigate", "select"]:
 			_material.set_shader_parameter("brush", Vector3(0.0, 0.0, -1.0))
+		if shape_editor:
+			shape_editor.active = value == "select"
 var brush_radius_m := 100.0
 var brush_strength := 1.0
 ## Ausgangswert für die nächste erzeugende Bearbeitung (vom Editor fest abgeleitet).
@@ -78,6 +80,8 @@ var _line := PackedVector2Array()
 var _drawing_line := false
 var _line_preview: MeshInstance3D
 var _lin_texture: ImageTexture
+## Gezeichnete Landformen wählen und verändern (Werkzeug "select").
+var shape_editor: ShapeEditor
 
 
 func _ready() -> void:
@@ -155,6 +159,11 @@ func _ready() -> void:
 	_line_preview.material_override = line_material
 	add_child(_line_preview)
 
+	shape_editor = ShapeEditor.new()
+	shape_editor.name = "ShapeEditor"
+	shape_editor.view = self
+	add_child(shape_editor)
+
 
 ## Zeigt einen Ausschnitt. regions: gemerkte vertiefte Ausschnitte (als Rahmen gezeigt).
 ## parent: der gröbere Ausschnitt darüber, als Umgebung gezeigt (oder null).
@@ -199,6 +208,7 @@ func show_window(w: TerrainWindow, p_sampler: TerrainSampler, regions: Array, pa
 	_build_trees()
 	_build_details()
 	_build_frames(regions)
+	shape_editor.refresh()
 
 
 # --- Umrechnung ----------------------------------------------------------------------------
@@ -248,7 +258,7 @@ func world_rect() -> Rect2:
 
 ## Läuft gerade ein Strich oder eine Linie? (Dann kein Rückgängig und kein Maßstabswechsel.)
 func is_busy() -> bool:
-	return _painting or _drawing_line
+	return _painting or _drawing_line or (shape_editor != null and shape_editor.is_busy())
 
 
 static func is_line_tool(t: String) -> bool:
@@ -257,6 +267,9 @@ static func is_line_tool(t: String) -> bool:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if window == null or not visible:
+		return
+	if tool == "select":
+		shape_editor.handle_input(event)
 		return
 	if event is InputEventMouseMotion:
 		var hit: Variant = _hit((event as InputEventMouseMotion).position)
@@ -302,7 +315,7 @@ func _hit(screen_position: Vector2) -> Variant:
 
 
 func _update_brush(hit: Variant) -> void:
-	if hit == null or tool == "navigate":
+	if hit == null or tool == "navigate" or tool == "select":
 		_material.set_shader_parameter("brush", Vector3(0.0, 0.0, -1.0))
 		hover_changed.emit(0.0, 0.0, false)
 		return

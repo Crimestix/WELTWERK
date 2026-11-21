@@ -34,7 +34,7 @@ const EARTH_RADIUS_KM := 6371.0
 ## Werkzeuge in Gruppen: [Überschrift, [[Werkzeug, Name], …]].
 const TOOL_GROUPS := [
 	["", [["navigate", "Ansehen"]]],
-	["FORM", [["shape_add", "Land zeichnen"], ["shape_remove", "Land wegschneiden"],
+	["FORM", [["select", "Formen bearbeiten"], ["shape_add", "Land zeichnen"], ["shape_remove", "Land wegschneiden"],
 		["land_add", "Küste anfügen"], ["land_remove", "Küste abtragen"]]],
 	["GELÄNDE", [["raise", "Erhöhen"], ["lower", "Senken"], ["smooth", "Glätten"], ["flatten", "Ebene"],
 		["gen_mountains", "Gebirge"], ["gen_hills", "Hügelland"]]],
@@ -47,6 +47,7 @@ const HINTS := {
 	"navigate": "Rechte Maustaste ziehen verschiebt, Mausrad zoomt. Am Zoom-Anschlag weiterzoomen öffnet einen feineren Ausschnitt.",
 	"shape_add": "Linke Maustaste gedrückt halten und einen Umriss ziehen. Beim Loslassen wird er geschlossen und zu Land.",
 	"shape_remove": "Einen Umriss ziehen: Das Innere wird zu Meer – für Buchten, Fjorde, Meerengen.",
+	"select": "Gezeichnete Landform anklicken. Ziehen verschiebt, Punkte ziehen formt um, Doppelklick auf den Rand fügt einen Punkt ein, Entf löscht. Umschalt+Mausrad skaliert, Strg+Mausrad dreht.",
 	"land_add": "Malen fügt Land an – zum Nacharbeiten der Küste.",
 	"land_remove": "Malen trägt Land ab – zum Nacharbeiten der Küste.",
 	"raise": "Malen hebt das Gelände.",

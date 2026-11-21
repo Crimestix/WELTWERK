@@ -4,7 +4,8 @@ extends RefCounted
 ## Referenz wird in gleicher Bildlage mit der Maus nachgezeichnet, danach werden Gebirge, Wald,
 ## Flüsse, Seen und Inseln an den Stellen der Referenz mit den Werkzeugen gemalt. Ergebnis aus
 ## gleichem Blickwinkel, Seite an Seite mit der Referenz. Dazu Prüfungen: Bearbeiten, Speichern,
-## Rückgängig. Aufruf: --vergleich=<Ordner> (immer neue Welt in <Ordner>/welt.json).
+## Rückgängig, nachträgliches Verändern der gezeichneten Form („Formen bearbeiten“, Bild
+## form_gewaehlt.jpg). Aufruf: --vergleich=<Ordner> (immer neue Welt in <Ordner>/welt.json).
 
 const REFERENCE := "res://docs/referenz/kontinent_konzept.webp"
 ## Bildgröße der Referenz (Koordinaten unten beziehen sich darauf).
@@ -133,6 +134,8 @@ func run(dir: String) -> void:
 		editor._use_tool("gen_islands")
 		editor.ui.set_brush(0.03, 0.8)
 		await _ground_stroke(chain)
+	# Gezeichnete Landformen nachträglich verändern (wählen, umformen, verschieben, skalieren, löschen).
+	await _edit_shapes(dir)
 	editor._use_tool("navigate")
 	editor.ui.visible = ui_was
 	var count := _strokes()
@@ -225,6 +228,246 @@ func _ground_stroke(points: Array) -> void:
 	for p in points:
 		ground.append(ground_of_ref(p))
 	await editor._mouse_stroke(ground)
+
+
+## Werkzeug „Formen bearbeiten“ mit echten Mausereignissen: Umriss wählen, einen Punkt der Ostküste
+## nach außen ziehen (dort wird Meer zu Land), Form verschieben, mit Umschalt+Mausrad skalieren,
+## die Bucht mit Entf löschen – jeweils mit Rückgängig zurück zum exakt gleichen Stand.
+func _edit_shapes(dir: String) -> void:
+	var shapes: ShapeEditor = editor.landscape.shape_editor
+	var doc: WorldDocument = editor.doc
+	var id: String = editor.active_id
+	var count := _strokes()
+	editor._use_tool("select")
+	_frame()
+	await editor._frames(10)
+	var outline: Dictionary = (editor.continent()["strokes"][0] as Dictionary).duplicate(true)
+	var bay: Dictionary = (editor.continent()["strokes"][1] as Dictionary).duplicate(true)
+	var history := doc._undo.size()
+
+	# Wählen: Klick ins Landesinnere im Westen.
+	var inside := screen_of_ref(Vector2(600, 650))
+	await _click(inside)
+	checks["Form per Klick gewählt (ohne Verlaufseintrag)"] = shapes.selected == 0 and doc._undo.size() == history
+
+	# Punkt an der Ostküste suchen, der nach außen ins Meer gezogen werden kann.
+	var view: Vector2 = editor.get_viewport().get_visible_rect().size
+	var poly := ShapeEdit.outline(outline)
+	var vertex := -1
+	var from := Vector2.ZERO
+	var normal := Vector2.ZERO
+	var probe := Vector2.ZERO
+	var best_x := -INF
+	var gw: TerrainWindow = editor.globe_window(id)
+	for k in poly.size():
+		var s: Vector2 = editor._screen_of(poly[k])
+		# Nicht unter der Übersichtskarte (unten rechts), damit das Bild den Griff zeigt.
+		if s.x < view.x * 0.6 or s.x <= best_x or s.y < view.y * 0.2 or s.y > view.y * 0.66:
+			continue
+		var tangent: Vector2 = editor._screen_of(poly[(k + 1) % poly.size()]) - editor._screen_of(poly[k - 1])
+		var n := Vector2(tangent.y, -tangent.x).normalized()
+		if ShapeEdit.contains(outline, _ground_at(s + n * 20.0)):
+			n = -n
+		var t := s + n * 60.0
+		if t.x > view.x - 30.0 or t.y < 30.0 or t.y > view.y - 30.0:
+			continue
+		var g := _ground_at(s + n * 38.0)
+		if gw.height_at(g.x, g.y) > -5.0 or ShapeEdit.shape_at(editor.continent(), g.x, g.y) >= 0:
+			continue
+		vertex = k
+		from = s
+		normal = n
+		probe = g
+		best_x = s.x
+	checks["Küstenpunkt im Osten gefunden"] = vertex >= 0
+	if vertex < 0:
+		return
+	var sea_before := gw.height_at(probe.x, probe.y)
+
+	# Punkt um 60 Bildpunkte nach außen ziehen.
+	await _drag(from, from + normal * 60.0)
+	var after: Dictionary = editor.continent()["strokes"][0]
+	var land_after: float = editor.globe_window(id).height_at(probe.x, probe.y)
+	checks["Punkt gezogen: Meer wird Land (%d m → %d m), ein Schritt" % [int(sea_before), int(land_after)]] = \
+		land_after > 0.0 and doc._undo.size() == history + 1 and _strokes() == count \
+		and not ShapeEdit.same_outline(after, outline) and Stroke.dab_count(after) == poly.size()
+	checks["Form bleibt nach der Änderung gewählt"] = shapes.selected == 0
+	# Bild: gewählte Form mit Punktgriffen (Oberfläche sichtbar), dann näher am gezogenen Punkt.
+	# Erst ohne Oberfläche zeigen (die Übersichtskarte liegt unten rechts über der Ostküste).
+	await _hover(from + normal * 60.0 + Vector2(2.0, 1.0))
+	checks["Gezogener Punkt unter dem Zeiger erkannt (Griff hervorgehoben)"] = shapes.hovered_vertex == vertex
+	editor.ui.visible = true
+	await editor._frames(10)
+	await editor._shot(dir.path_join("form_gewaehlt.jpg"))
+	var moved_point := ShapeEdit.outline(after)[vertex]
+	editor.camera_rig.jump_to(editor.landscape.to_render(moved_point.x, moved_point.y), editor.camera_rig.max_distance * 0.3)
+	await editor._frames(15)
+	await editor._shot(dir.path_join("form_gewaehlt_nah.jpg"))
+	editor.ui.visible = false
+	_frame()
+	await editor._frames(10)
+	editor._undo()
+	await editor._frames(5)
+	checks["Rückgängig: Küste wie vorher (Meer)"] = editor.continent()["strokes"][0] == outline \
+		and editor.globe_window(id).height_at(probe.x, probe.y) < 0.0 and shapes.selected == 0
+
+	# Verschieben: im Inneren greifen und 30 Bildpunkte nach Osten ziehen.
+	history = doc._undo.size()
+	await _drag(inside, inside + Vector2(30.0, 0.0))
+	var shifted := ShapeEdit.centroid(editor.continent()["strokes"][0]) - ShapeEdit.centroid(outline)
+	checks["Form verschoben (%s nach Osten), ein Schritt" % EditorUI.meters(shifted.x)] = shifted.x > 1000.0 \
+		and absf(shifted.y) < shifted.x * 0.5 and doc._undo.size() == history + 1
+	editor._undo()
+	checks["Rückgängig: Verschieben zurück"] = editor.continent()["strokes"][0] == outline
+
+	# Skalieren: zweimal Umschalt + Mausrad über der Form – ein Schritt nach der Mausrad-Folge.
+	history = doc._undo.size()
+	await _hover(inside)
+	var camera_before: Transform3D = editor.camera_rig.camera.global_transform
+	for k in 2:
+		_wheel(inside, true, true, false)
+		await editor._frames(2)
+	var locked: bool = editor._history_locked()
+	await editor.get_tree().create_timer(ShapeEditor.WHEEL_COMMIT + 0.4).timeout
+	await editor._frames(3)
+	var scaled: Dictionary = editor.continent()["strokes"][0]
+	checks["Umschalt+Mausrad skaliert (×%s), Kamera bleibt, ein Schritt" % String.num(float(scaled["radius"]) / float(outline["radius"]), 3)] = \
+		locked and absf(float(scaled["radius"]) / float(outline["radius"]) - 1.1025) < 0.001 and doc._undo.size() == history + 1 \
+		and editor.camera_rig.camera.global_transform.is_equal_approx(camera_before)
+	editor._undo()
+	checks["Rückgängig: Größe zurück"] = editor.continent()["strokes"][0] == outline
+
+	# Einzelnen Punkt löschen: Zeiger über einen Punkt der Westküste, Entf.
+	var west := -1
+	var west_x := INF
+	for k in poly.size():
+		var s: Vector2 = editor._screen_of(poly[k])
+		if s.x > 40.0 and s.x < west_x and s.y > view.y * 0.3 and s.y < view.y * 0.7:
+			west = k
+			west_x = s.x
+	history = doc._undo.size()
+	await _hover(editor._screen_of(poly[west]))
+	var hovered_west := shapes.hovered_vertex == west
+	_key(KEY_DELETE)
+	await editor._frames(5)
+	checks["Punkt unter dem Zeiger mit Entf gelöscht (Form bleibt)"] = hovered_west \
+		and Stroke.dab_count(editor.continent()["strokes"][0]) == poly.size() - 1 and _strokes() == count \
+		and doc._undo.size() == history + 1 and shapes.selected == 0
+	editor._undo()
+	checks["Rückgängig: Punkt zurück"] = editor.continent()["strokes"][0] == outline
+
+	# Doppelklick auf den Rand zwischen zwei Punkten fügt dort einen Punkt ein.
+	var mid: Vector2 = (editor._screen_of(poly[west]) + editor._screen_of(poly[(west + 1) % poly.size()])) * 0.5
+	history = doc._undo.size()
+	await _click(mid)
+	editor._send_mouse(mid, true, true, true)
+	await editor._frames(2)
+	editor._send_mouse(mid, false, true)
+	await editor._frames(5)
+	var inserted: Dictionary = editor.continent()["strokes"][0]
+	var new_point := ShapeEdit.outline(inserted)[west + 1] if Stroke.dab_count(inserted) > west + 1 else Vector2(INF, INF)
+	checks["Doppelklick auf den Rand fügt einen Punkt ein"] = Stroke.dab_count(inserted) == poly.size() + 1 \
+		and doc._undo.size() == history + 1 and editor._screen_of(new_point).distance_to(mid) < 12.0
+	editor._undo()
+	checks["Rückgängig: eingefügter Punkt weg"] = editor.continent()["strokes"][0] == outline
+
+	# Bucht wählen und mit Entf löschen; Rückgängig setzt sie an dieselbe Stelle zurück.
+	var bay_center := ShapeEdit.centroid(bay)
+	var bay_screen: Vector2 = editor._screen_of(bay_center)
+	await _click(bay_screen)
+	var bay_selected := shapes.selected == 1
+	_key(KEY_DELETE)
+	await editor._frames(5)
+	var land_without: float = editor.globe_window(id).height_at(bay_center.x, bay_center.y)
+	checks["Bucht gewählt und mit Entf gelöscht (dort Land, %d m)" % int(land_without)] = bay_selected \
+		and _strokes() == count - 1 and land_without > 0.0 and shapes.selected == -1
+	editor._undo()
+	await editor._frames(3)
+	checks["Rückgängig: Bucht an derselben Stelle zurück"] = _strokes() == count \
+		and editor.continent()["strokes"][1] == bay and editor.globe_window(id).height_at(bay_center.x, bay_center.y) < 0.0
+	await _click(inside)
+	_key(KEY_ESCAPE)
+	await editor._frames(2)
+	checks["Esc hebt die Wahl auf"] = shapes.selected == -1
+
+	# Im vertieften Ausschnitt (1:8) an der Westküste: dieselbe Form wählen und einen Punkt ziehen.
+	# (Ausschnitt ohne ihn als Region zu merken – sonst trüge das Vergleichsbild einen Rahmen.)
+	var coast: Vector2 = poly[west]
+	var region_size: float = editor.levels[0]["size"] / editor.FACTOR
+	editor.levels.append({"cx": coast.x, "cy": coast.y, "size": region_size})
+	editor._show_level()
+	editor.camera_rig.jump_to(Vector3.ZERO, editor.camera_rig.max_distance * 0.95)
+	await editor._frames(10)
+	var inward := (ShapeEdit.centroid(outline) - coast).normalized()
+	await _click(editor._screen_of(coast + inward * region_size * 0.2))
+	var region_selected := shapes.selected == 0
+	history = doc._undo.size()
+	var handle: Vector2 = editor._screen_of(coast)
+	await _drag(handle, handle - (editor._screen_of(coast + inward * 1000.0) - handle).normalized() * 50.0)
+	var region_after: Dictionary = editor.continent()["strokes"][0]
+	checks["Im vertieften Ausschnitt wählbar und veränderbar"] = region_selected and doc._undo.size() == history + 1 \
+		and not ShapeEdit.same_outline(region_after, outline)
+	editor._undo()
+	checks["Rückgängig im Ausschnitt"] = editor.continent()["strokes"][0] == outline
+	editor.levels.pop_back()
+	editor._show_level()
+	_frame()
+	await editor._frames(5)
+
+
+## Bodenpunkt (Kontinentmeter) unter einem Bildschirmpunkt, wie ihn das Werkzeug trifft.
+func _ground_at(screen: Vector2) -> Vector2:
+	var hit: Variant = editor.landscape._hit(screen)
+	return editor.landscape.to_continent(hit) if hit != null else Vector2(INF, INF)
+
+
+func _hover(screen: Vector2) -> void:
+	var e := InputEventMouseMotion.new()
+	e.position = screen
+	e.global_position = screen
+	Input.parse_input_event(e)
+	await editor._frames(2)
+
+
+func _click(screen: Vector2) -> void:
+	await _hover(screen)
+	editor._send_mouse(screen, true, true)
+	await editor._frames(2)
+	editor._send_mouse(screen, false, true)
+	await editor._frames(5)
+
+
+## Mit gedrückter linker Maustaste von a nach b (in Schritten, wie eine Hand).
+func _drag(a: Vector2, b: Vector2) -> void:
+	await _hover(a)
+	editor._send_mouse(a, true, true)
+	await editor._frames(2)
+	for k in 12:
+		editor._send_motion(a.lerp(b, (k + 1) / 12.0))
+		await editor._frames(1)
+	editor._send_mouse(b, false, true)
+	await editor._frames(5)
+
+
+func _wheel(screen: Vector2, up: bool, shift: bool, ctrl: bool) -> void:
+	var e := InputEventMouseButton.new()
+	e.position = screen
+	e.global_position = screen
+	e.button_index = MOUSE_BUTTON_WHEEL_UP if up else MOUSE_BUTTON_WHEEL_DOWN
+	e.pressed = true
+	e.factor = 1.0
+	e.shift_pressed = shift
+	e.ctrl_pressed = ctrl
+	Input.parse_input_event(e)
+
+
+func _key(keycode: Key) -> void:
+	for pressed in [true, false]:
+		var e := InputEventKey.new()
+		e.keycode = keycode
+		e.physical_keycode = keycode
+		e.pressed = pressed
+		Input.parse_input_event(e)
 
 
 ## Referenz links, eigenes Bild rechts, gleiche Höhe.

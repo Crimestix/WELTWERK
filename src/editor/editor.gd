@@ -109,6 +109,8 @@ func _ready() -> void:
 
 	landscape.camera = camera_rig.camera
 	landscape.stroke_finished.connect(_on_stroke_finished)
+	landscape.shape_editor.shape_changed.connect(_on_shape_changed)
+	landscape.shape_editor.shape_removed.connect(_on_shape_removed)
 	landscape.hint.connect(func(text: String) -> void:
 		_notice = text
 		_update_ui())
@@ -537,6 +539,19 @@ func _on_stroke_finished(stroke: Dictionary) -> void:
 	_painted_live = false
 
 
+## Gezeichnete Landform verschoben, umgeformt, skaliert oder gedreht: ein Schritt im Verlauf.
+func _on_shape_changed(index: int, stroke: Dictionary) -> void:
+	if active_id == "" or index < 0 or index >= (continent()["strokes"] as Array).size():
+		return
+	doc.execute(doc.replace_stroke_command(active_id, index, stroke))
+
+
+func _on_shape_removed(index: int) -> void:
+	if active_id == "" or index < 0 or index >= (continent()["strokes"] as Array).size():
+		return
+	doc.execute(doc.remove_stroke_command(active_id, index))
+
+
 func _on_variant() -> void:
 	var next := FixedRandom.derive(continent()["seed"], "Variante") & 0x7FFFFFFF
 	doc.execute(doc.set_command(active_id, "seed", next))
@@ -632,7 +647,8 @@ func _restore_drag() -> void:
 
 # --- Änderungen am Dokument ----------------------------------------------------------------
 
-## Gesperrt, solange gemalt oder ein Regler bzw. Kontinent gezogen wird.
+## Gesperrt, solange gemalt, eine Form gezogen/gedreht (LandscapeView.is_busy schließt den
+## ShapeEditor ein) oder ein Regler bzw. Kontinent gezogen wird.
 func _history_locked() -> bool:
 	return landscape.is_busy() or not _placement_before.is_empty() or not _drag_before.is_empty()
 
