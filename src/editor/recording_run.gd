@@ -260,6 +260,7 @@ func run(dir: String) -> void:
 	caption("1 · Neuen Kontinent anlegen und den Umriss zeichnen")
 	await press("Neu zeichnen")
 	await frames(20)
+	editor._on_placement("latitude", 42.0, true)
 	comparison._frame()
 	await frames(25)
 	var outline := comparison.outline_points()

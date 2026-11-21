@@ -28,10 +28,9 @@ const DETAIL_BELOW := 4200.0
 const DETAILED_TREES_BELOW := 620.0
 
 
-## Überhöhung je Ausschnittgröße (nur Darstellung): 1 im Detail, bis 5,5 auf Kontinentebene
-## (stärker wirkt flaches Hügelland wie eine Buckelpiste).
+## Überhöhung je Ausschnittgröße (nur Darstellung): 1 im Detail, bis 7 auf Kontinentebene.
 static func exaggeration_for(size_m: float) -> float:
-	return clampf(0.8 * pow(size_m / 2000.0, 0.4), 1.0, 5.5)
+	return clampf(0.8 * pow(size_m / 2000.0, 0.4), 1.0, 7.0)
 
 var window: TerrainWindow
 var sampler: TerrainSampler

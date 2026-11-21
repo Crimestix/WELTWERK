@@ -90,6 +90,9 @@ func run(dir: String) -> void:
 	# 1 Neuer gezeichneter Kontinent, Ansicht wie die Referenz.
 	editor.ui.new_continent_pressed.emit(true)
 	await editor._frames(10)
+	# Gemäßigte Breite wie in der Referenz (Schnee auf den Kämmen, Laub- und Nadelwald).
+	editor._on_placement("latitude", 42.0, true)
+	await editor._frames(5)
 	_frame()
 	await editor._frames(20)
 	var ui_was: bool = editor.ui.visible
@@ -110,7 +113,7 @@ func run(dir: String) -> void:
 	var t := Time.get_ticks_usec()
 	for chain in MOUNTAINS:
 		editor._use_tool("gen_mountains")
-		editor.ui.set_brush(0.05, 0.85)
+		editor.ui.set_brush(0.075, 0.85)
 		await _ground_stroke(chain)
 	timing["Gebirge malen"] = (Time.get_ticks_usec() - t) / 1000.0
 	for chain in HILLS:
@@ -123,7 +126,7 @@ func run(dir: String) -> void:
 		await _ground_stroke(chain)
 	for chain in RIVERS:
 		editor._use_tool("river")
-		editor.ui.set_brush(0.005, 0.5)
+		editor.ui.set_brush(0.0015, 0.5)
 		await _screen_line(_screen_points(chain), false)
 	for p in LAKES:
 		editor._use_tool("lake")
@@ -141,7 +144,8 @@ func run(dir: String) -> void:
 	var count := _strokes()
 	checks["Alle Bearbeitungen angelegt (%d)" % count] = count >= 20
 
-	# 3 Bild aus gleicher Lage, Seite an Seite mit der Referenz.
+	# 3 Bild aus gleicher Lage, Seite an Seite mit der Referenz (ohne Hinweiszeile).
+	editor.ui._flash("", 0.0, false)
 	_frame()
 	await editor._frames(30)
 	await editor._shot(dir.path_join("kontinent.jpg"))
@@ -271,7 +275,7 @@ func _edit_shapes(dir: String) -> void:
 		var t := s + n * 60.0
 		if t.x > view.x - 30.0 or t.y < 30.0 or t.y > view.y - 30.0:
 			continue
-		var g := _ground_at(s + n * 38.0)
+		var g := _ground_at(s + n * 30.0)
 		if gw.height_at(g.x, g.y) > -5.0 or ShapeEdit.shape_at(editor.continent(), g.x, g.y) >= 0:
 			continue
 		vertex = k

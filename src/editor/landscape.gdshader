@@ -29,8 +29,8 @@ uniform vec3 brush_color : source_color = vec3(0.88, 0.70, 0.38);
 uniform bool is_context = false;
 uniform vec4 hole = vec4(0.0);
 
-uniform vec3 map_meadow_light : source_color = vec3(0.52, 0.57, 0.21);
-uniform vec3 map_meadow_mid : source_color = vec3(0.38, 0.48, 0.15);
+uniform vec3 map_meadow_light : source_color = vec3(0.47, 0.56, 0.19);
+uniform vec3 map_meadow_mid : source_color = vec3(0.34, 0.46, 0.14);
 uniform vec3 lush_color : source_color = vec3(0.23, 0.39, 0.11);
 uniform vec3 highland_color : source_color = vec3(0.52, 0.49, 0.31);
 uniform vec3 steppe_color : source_color = vec3(0.71, 0.60, 0.33);
@@ -176,7 +176,7 @@ void fragment() {
 	vec3 grass = mix(map_meadow_mid, map_meadow_light, clamp(0.5 + vary * 1.2, 0.0, 1.0));
 	grass = mix(grass, lush_color, smoothstep(0.5, 0.95, moist) * 0.6);
 	float dry_patch = smoothstep(0.5, 0.8, m_noise(m / 60000.0 + 31.0) * 0.6 + m_noise(m / 14000.0 + 5.0) * 0.4);
-	grass = mix(grass, steppe_color, clamp(smoothstep(0.3, 0.0, moist) * 0.7 + dry_patch * 0.25 * (0.4 + dryness), 0.0, 0.7));
+	grass = mix(grass, steppe_color, clamp(smoothstep(0.25, 0.0, moist) * 0.6 + dry_patch * 0.2 * smoothstep(0.25, 0.6, dryness), 0.0, 0.6));
 	// Höhenstufen: Hochland olivbraun, damit Ebenen und Bergland auseinanderzuhalten sind.
 	grass = mix(grass, highland_color, smoothstep(1000.0, 2400.0, height_f) * 0.5);
 	// Feine Flecken etwa drei Bildpunkte groß – Lebendigkeit wie auf einer gemalten Karte.
@@ -213,7 +213,10 @@ void fragment() {
 	rock = mix(rock, scree_color, smoothstep(0.6, 0.95, rocky) * 0.5);
 	float alpine = smoothstep(treeline - 200.0, treeline + 500.0, height_f + vary * 300.0);
 	// Fels erst im Bergland: niedrige Hügel bleiben grün, auch wenn sie überhöht steil wirken.
-	float rock_w = max(smoothstep(0.5, 0.72, slope + (rocky - 0.5) * 0.12) * smoothstep(800.0, 1500.0, height_f), alpine * 0.85);
+	// Steile Flanken im Bergland felsig, Grate (negative Krümmung) zuerst – so zeichnen sich
+	// Kämme und Seitengrate ab, Täler bleiben grün.
+	float ridge = clamp(-curv / 150.0, 0.0, 1.0);
+	float rock_w = max(smoothstep(0.26, 0.5, slope + ridge * 0.15 + (rocky - 0.5) * 0.12) * smoothstep(900.0, 1700.0, height_f), alpine * 0.85);
 	float snow_w = smoothstep(snowline - 120.0, snowline + 200.0, height_f + (vary - 0.0) * 500.0 + clamp(-curv, -100.0, 300.0))
 		* (1.0 - smoothstep(0.62, 0.8, slope));
 
@@ -238,8 +241,11 @@ void fragment() {
 	c = mix(c, c * vec3(0.72, 0.8, 0.72), wet * 0.6);
 
 	// --- Kartenschummerung (Licht von Nordwesten) und Kammlicht -----------------------------------
+	// Für die Schummerung stärker geneigt als dargestellt: große, flache Gebirge (wenige Grad
+	// Neigung auf Kontinentebene) sollen sich lesen lassen wie auf einer gemalten Karte.
+	vec3 ns = normalize(vec3(n.x * 2.6, n.y, n.z * 2.6));
 	vec3 light = normalize(vec3(-0.65, 0.9, -0.75));
-	float shade = clamp(dot(n, light) / light.y, 0.35, 1.15);
+	float shade = clamp(dot(ns, light) / light.y, 0.3, 1.2);
 	float land = step(0.0, height_f);
 	c *= mix(1.0, shade, hillshade * land);
 	// Täler etwas dunkler, Grate heller: Gebirge wirken plastisch auch bei flachem Licht.
