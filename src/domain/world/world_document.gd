@@ -86,6 +86,13 @@ func replace_stroke_command(continent_id: String, index: int, new_stroke: Dictio
 	return {"kind": "replace_stroke", "continent": continent_id, "index": index, "old": old, "new": new_stroke}
 
 
+## Einen Strich entfernen (z. B. eine gezeichnete Landform löschen). Der Befehl trägt eine Kopie
+## und den Listenplatz – Rückgängig setzt ihn genau dorthin zurück.
+func remove_stroke_command(continent_id: String, index: int) -> Dictionary:
+	var stroke: Dictionary = (continent(continent_id)["strokes"][index] as Dictionary).duplicate(true)
+	return {"kind": "remove_stroke", "continent": continent_id, "index": index, "stroke": stroke}
+
+
 ## Neuen Kontinent anlegen (am Ende der Liste).
 static func add_continent_command(data: Dictionary) -> Dictionary:
 	return {"kind": "add_continent", "data": data.duplicate(true)}
@@ -200,6 +207,8 @@ static func command_continent(command: Dictionary) -> String:
 	match command.get("kind", ""):
 		"add_continent", "remove_continent":
 			return command["data"]["id"]
+		"add_stroke", "replace_stroke", "remove_stroke":
+			return command["continent"]
 		"group":
 			for c in command["commands"]:
 				var id := command_continent(c)
@@ -221,6 +230,12 @@ func _apply(command: Dictionary, forward: bool) -> void:
 		"replace_stroke":
 			var strokes: Array = continent(command["continent"])["strokes"]
 			strokes[command["index"]] = (command["new" if forward else "old"] as Dictionary).duplicate(true)
+		"remove_stroke":
+			var strokes: Array = continent(command["continent"])["strokes"]
+			if forward:
+				strokes.remove_at(command["index"])
+			else:
+				strokes.insert(mini(command["index"], strokes.size()), (command["stroke"] as Dictionary).duplicate(true))
 		"set":
 			_set_value(command["continent"], command["key"], command["new"] if forward else command["old"])
 		"resize":

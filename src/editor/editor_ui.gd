@@ -71,7 +71,7 @@ const GROUP_TIPS := {
 
 const HINTS := {
 	"navigate": "Rechte Maustaste zieht die Karte, Mausrad zoomt. Am Zoom-Anschlag weiter: feinere Region.",
-	"select": "Eine gezeichnete Form anklicken – dann verschieben oder verändern.",
+	"select": "Form anklicken: ziehen verschiebt, Punkte ziehen formt um, Doppelklick auf den Rand fügt einen Punkt ein, Entf löscht; Umschalt+Mausrad skaliert, Strg+Mausrad dreht.",
 	"shape_add": "Mit gedrückter linker Maustaste einen Umriss ziehen – beim Loslassen wird er Land.",
 	"shape_remove": "Einen Umriss ziehen: Das Innere wird Meer – für Buchten, Fjorde, Meerengen.",
 	"land_add": "Malen fügt Land an der Küste an.",
