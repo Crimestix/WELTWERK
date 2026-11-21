@@ -448,7 +448,7 @@ func _update_minimap() -> void:
 	if active_id == "" or levels.is_empty():
 		return
 	var w := globe_window(active_id)
-	var image := GlobeView.bake_colors(w)
+	var image := GlobeView.bake_colors(w, true)
 	# Meer sichtbar machen (im Globusbild durchsichtig).
 	image.convert(Image.FORMAT_RGBA8)
 	for j in image.get_height():

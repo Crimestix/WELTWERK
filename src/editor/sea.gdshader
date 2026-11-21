@@ -17,8 +17,8 @@ uniform bool is_lake = false;
 // Breite des Küstenscheins als Anteil des Ausschnitts.
 uniform float glow_width = 0.022;
 
-uniform vec3 shallow_color : source_color = vec3(0.20, 0.60, 0.58);
-uniform vec3 shelf_color : source_color = vec3(0.07, 0.36, 0.46);
+uniform vec3 shallow_color : source_color = vec3(0.14, 0.50, 0.52);
+uniform vec3 shelf_color : source_color = vec3(0.06, 0.32, 0.43);
 uniform vec3 deep_color : source_color = vec3(0.025, 0.10, 0.21);
 uniform vec3 abyss_color : source_color = vec3(0.015, 0.06, 0.15);
 uniform vec3 foam_color : source_color = vec3(0.86, 0.90, 0.86);
@@ -87,7 +87,7 @@ void fragment() {
 	c = mix(c, foam_color, foam * 0.45);
 
 	ALBEDO = c;
-	ALPHA = clamp(mix(0.35, 1.0, smoothstep(0.5, 30.0, depth_m)) + foam * 0.2, 0.0, 1.0);
+	ALPHA = clamp(mix(0.5, 1.0, smoothstep(0.5, 30.0, depth_m)) + foam * 0.2, 0.0, 1.0);
 	ROUGHNESS = 0.55;
 	SPECULAR = 0.18;
 	METALLIC = 0.0;

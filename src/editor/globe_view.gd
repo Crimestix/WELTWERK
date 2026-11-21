@@ -172,26 +172,40 @@ func view_center() -> Vector2:
 	return Vector2(rad_to_deg(_pitch), wrapf(-rad_to_deg(_yaw), -180.0, 180.0))
 
 
-## Farbbild eines Kontinents; Alpha = Land (weich an der Küste).
-static func bake_colors(w: TerrainWindow) -> Image:
+## Farbbild eines Kontinents; Alpha = Land (weich an der Küste). Farben wie die Kontinentkarte.
+## shade: Schummerung (Licht von Nordwesten) einrechnen – für die Übersichtskarte; der Globus
+## schattiert selbst.
+static func bake_colors(w: TerrainWindow, shade: bool = false) -> Image:
 	var snowline: float = w.climate["snowline"]
 	var dryness: float = w.climate["dryness"]
-	var meadow := Color(0.36, 0.47, 0.13).lerp(Color(0.64, 0.56, 0.26), clampf(dryness - 0.2, 0.0, 0.8))
-	var forest_c := Color(0.08, 0.20, 0.06)
-	var rock := Color(0.50, 0.47, 0.43)
-	var sand := Color(0.80, 0.72, 0.52)
-	var snow := Color(0.94, 0.95, 0.97)
-	var lake := Color(0.10, 0.36, 0.55)
+	var meadow := Color(0.40, 0.50, 0.16).lerp(Color(0.66, 0.57, 0.31), clampf(dryness - 0.3, 0.0, 0.7))
+	var forest_c := Color(0.08, 0.20, 0.07)
+	var rock := Color(0.52, 0.49, 0.44)
+	var sand := Color(0.84, 0.76, 0.55)
+	var snow := Color(0.95, 0.96, 0.98)
+	var lake := Color(0.08, 0.34, 0.47)
+	var res := w.res
+	var heights := w.height
+	var forest := w.forest
+	var water := w.water_level
 	var bytes := PackedByteArray()
-	bytes.resize(w.res * w.res * 4)
-	for k in w.res * w.res:
-		var h: float = w.height[k]
-		var c := meadow.lerp(forest_c, smoothstep(0.15, 0.6, w.forest[k]))
-		c = c.lerp(rock, smoothstep(1200.0, 2200.0, h))
-		c = c.lerp(sand, 1.0 - smoothstep(2.0, 40.0, h))
+	bytes.resize(res * res * 4)
+	for k in res * res:
+		var h: float = heights[k]
+		var c := meadow.lerp(forest_c, smoothstep(0.2, 0.7, forest[k]))
+		c = c.lerp(rock, smoothstep(1400.0, 2400.0, h))
+		c = c.lerp(sand, 1.0 - smoothstep(2.0, 25.0, h))
 		c = c.lerp(snow, smoothstep(snowline - 200.0, snowline + 200.0, h))
-		if w.water_level[k] > h:
+		if water[k] > h:
 			c = lake
+		elif shade and h > 0.0:
+			var i := k % res
+			var j := k / res
+			var dx := heights[j * res + mini(i + 1, res - 1)] - heights[j * res + maxi(i - 1, 0)]
+			var dy := heights[mini(j + 1, res - 1) * res + i] - heights[maxi(j - 1, 0) * res + i]
+			# Licht von Nordwesten: Hänge nach Nordwesten hell, nach Südosten dunkel.
+			var s := clampf(1.0 + (dx + dy) / (w.cell * 0.08), 0.6, 1.3)
+			c = Color(c.r * s, c.g * s, c.b * s)
 		bytes[k * 4] = int(clampf(c.r, 0.0, 1.0) * 255.0)
 		bytes[k * 4 + 1] = int(clampf(c.g, 0.0, 1.0) * 255.0)
 		bytes[k * 4 + 2] = int(clampf(c.b, 0.0, 1.0) * 255.0)

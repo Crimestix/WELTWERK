@@ -91,14 +91,32 @@ float h_smooth(vec2 uv) {
 	return smooth_data(uv).r;
 }
 
+// Gradientenrauschen (rund statt kästchenförmig wie Wertrauschen) mit ganzzahliger Mischfunktion.
+float g_noise(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	vec2 u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+	float a0 = m_hash12(i) * 6.2831853;
+	float a1 = m_hash12(i + vec2(1.0, 0.0)) * 6.2831853;
+	float a2 = m_hash12(i + vec2(0.0, 1.0)) * 6.2831853;
+	float a3 = m_hash12(i + vec2(1.0, 1.0)) * 6.2831853;
+	float v0 = dot(vec2(cos(a0), sin(a0)), f);
+	float v1 = dot(vec2(cos(a1), sin(a1)), f - vec2(1.0, 0.0));
+	float v2 = dot(vec2(cos(a2), sin(a2)), f - vec2(0.0, 1.0));
+	float v3 = dot(vec2(cos(a3), sin(a3)), f - vec2(1.0, 1.0));
+	return clamp(0.5 + 0.75 * mix(mix(v0, v1, u.x), mix(v2, v3, u.x), u.y), 0.0, 1.0);
+}
+
 // Muster in festen Metern, dessen Wellenlänge etwa „px“ Bildpunkte beträgt: zwei Oktaven werden
-// nach dem Zoom überblendet, das Muster bleibt an seinem Ort (kein Schwimmen beim Zoomen).
+// nach dem Zoom überblendet, das Muster bleibt an seinem Ort (kein Schwimmen beim Zoomen). Jede
+// Oktave ist gedreht, damit sich keine Rasterrichtung abzeichnet.
 float screen_pattern(vec2 m, float px_m, float px, float salt) {
 	float lvl = log2(max(px_m * px, 1.0));
 	float l0 = floor(lvl);
 	float t = lvl - l0;
-	float a = m_noise(m / exp2(l0) + salt);
-	float b = m_noise(m / exp2(l0 + 1.0) + salt * 1.7 + 5.3);
+	mat2 rot = mat2(vec2(0.8, -0.6), vec2(0.6, 0.8));
+	float a = g_noise(rot * (m / exp2(l0)) + salt);
+	float b = g_noise(rot * rot * (m / exp2(l0 + 1.0)) + salt * 1.7 + 5.3);
 	return mix(a, b, t);
 }
 
@@ -174,9 +192,9 @@ void fragment() {
 	float density = forest_f * 1.15 + (1.0 - smoothstep(0.2, 0.6, dryness)) * 0.12 * smoothstep(0.0, 0.25, forest_f + moist * 0.2);
 	float cover = smoothstep(clumps - 0.06, clumps + 0.06, density);
 	float conifer = clamp(0.1 + smoothstep(400.0, 1500.0, height_f) * 0.85 + conifer_bias * 0.5 + vary * 0.3, 0.0, 1.0);
-	float crowns = screen_pattern(m, px_m, 2.6, 21.0);
-	float crowns2 = screen_pattern(m, px_m, 1.4, 33.0);
-	float lit = smoothstep(0.35, 0.8, crowns * 0.7 + crowns2 * 0.3);
+	float crowns = screen_pattern(m, px_m, 3.2, 21.0);
+	float crowns2 = screen_pattern(m, px_m, 9.0, 33.0);
+	float lit = smoothstep(0.3, 0.85, crowns * 0.65 + crowns2 * 0.35);
 	vec3 broad = mix(forest_dark, forest_light, lit) * (0.92 + vary * 0.4);
 	vec3 needles = mix(conifer_dark, conifer_light, lit);
 	vec3 trees = mix(broad, needles, smoothstep(0.45, 0.7, conifer));
