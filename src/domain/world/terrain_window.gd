@@ -115,6 +115,8 @@ func compose_all() -> void:
 func compose_rect(i0: int, j0: int, i1: int, j1: int) -> void:
 	var treeline: float = climate.get("treeline", 3000.0)
 	var fade_from := extent_half * 0.9
+	# Übergang zum Gewässerbett weich (kein Knick, wo Böschung und Gelände sich treffen).
+	var blend := clampf(cell * 0.03, 4.0, 80.0)
 	for j in range(maxi(j0, 0), mini(j1, res - 1) + 1):
 		var ay := absf(y_at(j))
 		for i in range(maxi(i0, 0), mini(i1, res - 1) + 1):
@@ -135,8 +137,11 @@ func compose_rect(i0: int, j0: int, i1: int, j1: int) -> void:
 			var fw := flat_weight[k]
 			if fw > 0.0:
 				h = lerpf(h, flat_level[k], clampf(fw, 0.0, 1.0))
-			if water_bed[k] < h:
-				h = water_bed[k]
+			var bed := water_bed[k]
+			if bed < h + blend:
+				# Weiches Minimum: höchstens blend/4 unter dem harten Minimum.
+				var q := maxf(blend - absf(h - bed), 0.0) / blend
+				h = minf(h, bed) - q * q * blend * 0.25
 			height[k] = h
 			var f := clampf(base_forest[k] + forest_edit[k], 0.0, 1.0)
 			f *= smoothstep(1.0, 4.0, h) * (1.0 - smoothstep(treeline - 250.0, treeline, h))

@@ -11,6 +11,7 @@ const SUITES := [
 	"res://tests/test_target_landscape.gd",
 	"res://tests/test_continents.gd",
 	"res://tests/test_shape_edit.gd",
+	"res://tests/test_terrain_forms.gd",
 ]
 
 
