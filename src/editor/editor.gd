@@ -334,10 +334,28 @@ func move_level_to(x: float, y: float, remember: bool = true) -> void:
 	level["window"] = null
 	if remember:
 		doc.remember_region(active_id, level["cx"], level["cy"], level["size"])
+		_queue_save()
+	_follow_parents()
 	_show_level()
 	if remember:
 		camera_rig.jump_to(Vector3.ZERO, camera_rig.max_distance * 0.6)
 	_queue_view()
+
+
+## Übergeordnete Ausschnitte nachziehen, sobald ihr feinerer Ausschnitt ihren inneren Bereich
+## verlässt – so bleibt die Umgebung vollständig und Herauszoomen landet an derselben Stelle.
+func _follow_parents() -> void:
+	var half: float = continent()["size_km"] * 500.0
+	for i in range(levels.size() - 2, 0, -1):
+		var parent: Dictionary = levels[i]
+		var child: Dictionary = levels[i + 1]
+		var inner: float = parent["size"] * 0.3
+		if absf(child["cx"] - parent["cx"]) <= inner and absf(child["cy"] - parent["cy"]) <= inner:
+			continue
+		var cell: float = parent["size"] / 256.0
+		parent["cx"] = clampf(snappedf(child["cx"], cell), -half, half)
+		parent["cy"] = clampf(snappedf(child["cy"], cell), -half, half)
+		parent["window"] = null
 
 
 ## Mitführen: Nähert sich der Blickpunkt dem Rand eines feineren Ausschnitts, wandert der Ausschnitt
@@ -1227,6 +1245,24 @@ func _acceptance_continue(dir: String, report: Dictionary) -> void:
 	open_globe()
 	await _frames(30)
 	await _shot(dir.path_join("b03_globus_nach_neustart.jpg"))
+	# Viele Landmassen: 70 weitere Kontinente (mehr als eine Texturebene) in einem Schritt.
+	var adds := []
+	for k in 70:
+		var lat := -60.0 + float(k / 10) * 18.0
+		var lon := -170.0 + float(k % 10) * 34.0
+		adds.append(WorldDocument.add_continent_command(WorldDocument.new_continent(1000 + k, WorldDocument.BASE_GENERATED, 500.0, lat, lon)))
+	var t_many := Time.get_ticks_usec()
+	doc.execute(WorldDocument.group_command(adds))
+	report["timing_ms"]["70 Kontinente anlegen und Globus zeigen"] = (Time.get_ticks_usec() - t_many) / 1000.0
+	var last: Dictionary = doc.continents.back()
+	globe.face(last["latitude"], last["longitude"])
+	await _frames(20)
+	var hit_last := globe.continent_at(Vector2(last["latitude"], last["longitude"]))
+	checks["72 Kontinente auf dem Globus, der letzte ist anklickbar"] = doc.continents.size() == 72 and hit_last == last["id"]
+	await _shot(dir.path_join("b04_viele_kontinente.jpg"))
+	_undo()
+	await _frames(5)
+	checks["Rückgängig entfernt die 70 wieder (ein Schritt)"] = doc.continents.size() == 2
 
 
 ## Bildreihe über alle Maßstäbe an einer Küstenstelle des gewählten Kontinents (zur Bewertung

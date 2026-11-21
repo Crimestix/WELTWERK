@@ -1,6 +1,7 @@
 // Globus: Meer, Breitengrade und alle platzierten Kontinente (Anzahl nicht begrenzt).
 // Lage wie GlobeMath: mittabstandstreue Abbildung um (lat0, lon0), gedreht um heading.
-// Je Kontinent eine Ebene im Texturfeld (Farbe, Höhe) und zwei Texel in params:
+// Je Kontinent eine Kachel (8 × 8 je Ebene) im Texturfeld (Farbe, Höhe) und zwei Texel in params
+// (Spalte k % 256, Zeilenpaar k / 256):
 //   Zeile 0: Breite, Länge, Ausrichtung (Grad), Fenstergröße (m)
 //   Zeile 1: Mittelpunkt als Einheitsvektor, Kosinus der Reichweite (schnelle Vorprüfung)
 shader_type spatial;
@@ -13,6 +14,11 @@ uniform int count = 0;
 uniform int selected = -1;
 uniform float planet_radius_m = 6371000.0;
 uniform float relief_scale = 0.0;
+
+const int TILES = 8;
+const int PER_LAYER = 64;
+const int PARAM_WIDTH = 256;
+const float TILE_RES = 129.0;
 
 uniform vec3 deep_color : source_color = vec3(0.05, 0.19, 0.36);
 uniform vec3 shallow_color : source_color = vec3(0.10, 0.42, 0.48);
@@ -38,6 +44,18 @@ vec2 continent_uv(vec3 n, vec4 p) {
 	return vec2(x / p.w + 0.5, 0.5 - y / p.w);
 }
 
+ivec2 param_texel(int k, int row) {
+	return ivec2(k % PARAM_WIDTH, (k / PARAM_WIDTH) * 2 + row);
+}
+
+// Kachel-Koordinaten im Texturfeld (Texelmitten, kein Übergreifen auf Nachbarkacheln).
+vec3 atlas_uv(vec2 uv, int k) {
+	int t = k % PER_LAYER;
+	vec2 tile = vec2(float(t % TILES), float(t / TILES));
+	vec2 texel = tile * TILE_RES + 0.5 + clamp(uv, 0.0, 1.0) * (TILE_RES - 1.0);
+	return vec3(texel / (float(TILES) * TILE_RES), float(k / PER_LAYER));
+}
+
 bool inside(vec2 uv) {
 	return uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0;
 }
@@ -47,11 +65,11 @@ void vertex() {
 	vec3 n = normalize(VERTEX);
 	float h = 0.0;
 	for (int k = 0; k < count; k++) {
-		vec4 reach = texelFetch(params, ivec2(k, 1), 0);
+		vec4 reach = texelFetch(params, param_texel(k, 1), 0);
 		if (dot(n, reach.xyz) < reach.w) continue;
-		vec2 uv = continent_uv(n, texelFetch(params, ivec2(k, 0), 0));
+		vec2 uv = continent_uv(n, texelFetch(params, param_texel(k, 0), 0));
 		if (inside(uv)) {
-			h = max(h, textureLod(continent_data, vec3(uv, float(k)), 0.0).r);
+			h = max(h, textureLod(continent_data, atlas_uv(uv, k), 0.0).r);
 		}
 	}
 	VERTEX += n * max(h, 0.0) * relief_scale;
@@ -64,12 +82,13 @@ void fragment() {
 	float rough = 0.55;
 	float land_acc = 0.0;
 	for (int k = 0; k < count; k++) {
-		vec4 reach = texelFetch(params, ivec2(k, 1), 0);
+		vec4 reach = texelFetch(params, param_texel(k, 1), 0);
 		if (dot(n, reach.xyz) < reach.w) continue;
-		vec2 uv = continent_uv(n, texelFetch(params, ivec2(k, 0), 0));
+		vec2 uv = continent_uv(n, texelFetch(params, param_texel(k, 0), 0));
 		if (!inside(uv)) continue;
-		vec4 col = texture(continent_color, vec3(uv, float(k)));
-		float h = texture(continent_data, vec3(uv, float(k))).r;
+		vec3 auv = atlas_uv(uv, k);
+		vec4 col = texture(continent_color, auv);
+		float h = texture(continent_data, auv).r;
 		// Flachwasser nur dort, wo noch kein Land eines anderen Kontinents liegt.
 		vec3 sea = mix(shallow_color, c, smoothstep(-20.0, -600.0, h));
 		c = mix(c, sea, 1.0 - land_acc);

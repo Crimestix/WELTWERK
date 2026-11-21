@@ -216,7 +216,7 @@ Weltdatei: `user://welt.json` (Windows `%APPDATA%\Godot\app_userdata\Weltwerk\we
   wie Striche. Spielleiter hat 500 Higgsfield-Guthaben nachgelegt (Stand danach 561,85).
 - 21. 11. 2026 – Auftrag Kontinente (6–7 Stunden, bis 400 Higgsfield-Guthaben). Entscheidungen des
   Spielleiters: **Planetengröße anpassbar bis doppelte Erde**; **Anzahl der Landmassen auf dem
-  Globus nicht begrenzen** (umgesetzt: Kontinentdaten als Textur, praktisch über 2.000).
+  Globus nicht begrenzen** (umgesetzt: 8 × 8 Kontinente je Texturebene, über 130.000).
   Routineentscheidungen: neue Welt startet leer auf dem Globus; Kontinentfenster begrenzt das
   Land (weicher Rand); Schutz wirkt gegen Erzeugung erst ab seiner Stelle in der Strichliste;
   Bäume streuen nach eigenem Ausgangswert (bleiben bei neuer Variante); Wiese und Wald auf

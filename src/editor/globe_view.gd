@@ -20,8 +20,10 @@ const SHADER := preload("res://src/editor/globe.gdshader")
 ## Überhöhung des Reliefs auf dem Globus (nur Darstellung).
 const RELIEF_EXAGGERATION := 30.0
 const TEXTURE_RES := 129
-## Ebenen eines Texturfelds, die jede Grafikkarte kann (Kontinente darüber: Hinweis, siehe show_world).
-const MAX_LAYERS := 2048
+## Kacheln je Texturebene (8 × 8) und Breite der Lagetextur.
+const TILES := 8
+const PER_LAYER := 64
+const PARAM_WIDTH := 256
 
 @onready var camera: Camera3D = $Camera3D
 
@@ -71,8 +73,9 @@ func _ready() -> void:
 	visibility_changed.connect(func() -> void: light.visible = visible)
 
 
-## Alle Kontinente zeigen. windows: grober Ausschnitt je Kontinent (gleiche Reihenfolge).
-## Die Anzahl ist nicht begrenzt (nur durch die Grafikkarte: über 2000 Ebenen).
+## Alle Kontinente zeigen. windows: grober Ausschnitt je Kontinent (gleiche Reihenfolge, je
+## TEXTURE_RES Punkte). Je Texturebene liegen 8 × 8 Kontinente als Kacheln – bei 2.048 Ebenen
+## (jede Grafikkarte) über 130.000 Kontinente; es wird nichts weggelassen.
 func show_world(continents: Array, planet: Dictionary, windows: Array) -> void:
 	_continents = continents
 	_windows = windows
@@ -80,26 +83,28 @@ func show_world(continents: Array, planet: Dictionary, windows: Array) -> void:
 	for c in continents:
 		_ids.append(c["id"])
 	_planet_radius_m = planet["radius_km"] * 1000.0
+	var layers := maxi(1, ceili(windows.size() / float(PER_LAYER)))
+	var side := TILES * TEXTURE_RES
 	var colors: Array[Image] = []
 	var datas: Array[Image] = []
+	for l in layers:
+		colors.append(Image.create(side, side, false, Image.FORMAT_RGBA8))
+		datas.append(Image.create(side, side, false, Image.FORMAT_RF))
 	var cache := {}
-	if windows.size() > MAX_LAYERS:
-		push_warning("Mehr als %d Kontinente: die übrigen werden auf dem Globus nicht gezeigt." % MAX_LAYERS)
-		windows = windows.slice(0, MAX_LAYERS)
-		continents = continents.slice(0, MAX_LAYERS)
-		_continents = continents
-		_windows = windows
-	for w in windows:
+	for k in windows.size():
+		var w: TerrainWindow = windows[k]
 		var pair: Array = _baked.get(w, [])
 		if pair.is_empty():
 			pair = [bake_colors(w), _height_image(w)]
+			for img in pair:
+				if (img as Image).get_width() != TEXTURE_RES:
+					(img as Image).resize(TEXTURE_RES, TEXTURE_RES, Image.INTERPOLATE_BILINEAR)
 		cache[w] = pair
-		colors.append(pair[0])
-		datas.append(pair[1])
+		var at := Vector2i((k % PER_LAYER) % TILES, (k % PER_LAYER) / TILES) * TEXTURE_RES
+		var rect := Rect2i(0, 0, TEXTURE_RES, TEXTURE_RES)
+		colors[k / PER_LAYER].blit_rect(pair[0], rect, at)
+		datas[k / PER_LAYER].blit_rect(pair[1], rect, at)
 	_baked = cache
-	if colors.is_empty():
-		colors.append(Image.create(TEXTURE_RES, TEXTURE_RES, false, Image.FORMAT_RGBA8))
-		datas.append(Image.create(TEXTURE_RES, TEXTURE_RES, false, Image.FORMAT_RF))
 	var color_array := Texture2DArray.new()
 	color_array.create_from_images(colors)
 	var data_array := Texture2DArray.new()
@@ -109,38 +114,41 @@ func show_world(continents: Array, planet: Dictionary, windows: Array) -> void:
 	update_placement(continents, planet)
 
 
+## Lage aller Kontinente als Datentextur: je Kontinent zwei Texel (Spalte k % 256, Zeilenpaar k / 256).
 func update_placement(continents: Array, planet: Dictionary) -> void:
 	_continents = continents
 	_planet_radius_m = planet["radius_km"] * 1000.0
 	var count := continents.size()
+	var rows := maxi(1, ceili(count / float(PARAM_WIDTH))) * 2
 	var data := PackedFloat32Array()
-	data.resize(maxi(count, 1) * 2 * 4)
+	data.resize(PARAM_WIDTH * rows * 4)
 	var selected := -1
-	var width := maxi(count, 1)
 	for k in count:
 		var c: Dictionary = continents[k]
 		var size_m: float = c["size_km"] * 1000.0
-		data[k * 4] = c["latitude"]
-		data[k * 4 + 1] = c["longitude"]
-		data[k * 4 + 2] = c["heading"]
-		data[k * 4 + 3] = size_m
+		var col := k % PARAM_WIDTH
+		var row0 := ((k / PARAM_WIDTH) * 2 * PARAM_WIDTH + col) * 4
+		var row1 := row0 + PARAM_WIDTH * 4
+		data[row0] = c["latitude"]
+		data[row0 + 1] = c["longitude"]
+		data[row0 + 2] = c["heading"]
+		data[row0 + 3] = size_m
 		var center := GlobeMath.unit_vector(c["latitude"], c["longitude"])
 		# Reichweite: halbe Fensterdiagonale als Winkel, mit etwas Zugabe.
 		var reach := minf(size_m * 0.75 / _planet_radius_m, PI)
-		var row := (width + k) * 4
-		data[row] = center.x
-		data[row + 1] = center.y
-		data[row + 2] = center.z
-		data[row + 3] = cos(reach)
+		data[row1] = center.x
+		data[row1 + 1] = center.y
+		data[row1 + 2] = center.z
+		data[row1 + 3] = cos(reach)
 		if c["id"] == selected_id:
 			selected = k
-	var image := Image.create_from_data(width, 2, false, Image.FORMAT_RGBAF, data.to_byte_array())
+	var image := Image.create_from_data(PARAM_WIDTH, rows, false, Image.FORMAT_RGBAF, data.to_byte_array())
 	_material.set_shader_parameter("params", ImageTexture.create_from_image(image))
-	_material.set_shader_parameter("count", count)
+	# Nur so viele, wie Bilder hochgeladen sind (Vorschau während des Ziehens nutzt dieselbe Liste).
+	_material.set_shader_parameter("count", mini(count, _windows.size()))
 	_material.set_shader_parameter("selected", selected)
 	_material.set_shader_parameter("planet_radius_m", _planet_radius_m)
 	_material.set_shader_parameter("relief_scale", RADIUS / _planet_radius_m * RELIEF_EXAGGERATION)
-
 
 func select(id: String) -> void:
 	selected_id = id

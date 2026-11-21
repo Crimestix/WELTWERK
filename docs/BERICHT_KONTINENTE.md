@@ -38,7 +38,7 @@ Der Editor startet dort, wo zuletzt gearbeitet wurde (Globus, Kontinent oder Reg
 ## Was funktioniert (geprüft)
 
 Abnahme mit echten Mausereignissen in zwei getrennten Programmläufen (`docs/abnahme/`):
-**Teil 1: 20/20 Prüfungen, Teil 2 (nach Neustart): 9/9.** Dazu 49 Tests der Fachlogik.
+**Teil 1: 20/20 Prüfungen, Teil 2 (nach Neustart): 11/11.** Dazu 49 Tests der Fachlogik.
 
 | Prüfung | Bild |
 | --- | --- |
@@ -56,6 +56,7 @@ Abnahme mit echten Mausereignissen in zwei getrennten Programmläufen (`docs/abn
 | Weiterarbeiten nach Neustart, Rückgängig und Wiederholen | `b02` |
 | Ausschnitt wandert beim Verschieben über den Rand mit | `b02b` |
 | Globus nach Neustart | `b03` |
+| 70 weitere Kontinente in einem Schritt (72, zwei Texturebenen), der letzte anklickbar; ein Rückgängig | `b04` |
 
 Weitere geprüfte Eigenschaften (Tests): Land-Bearbeitungen wirken in Reihenfolge (zweimal
 anfügen, dann abtragen = Meer); kein Land jenseits des Kontinentfensters; Grundform wächst beim
@@ -96,8 +97,8 @@ feinster Ausschnitt 160 Bilder/s (Wiese/Ufer) bzw. 62 Bilder/s (dichter Mischwal
 
 ## Ungeprüft
 
-- Sehr viele Kontinente (geprüft: 2; vorgesehen sind über 2.000) und sehr lange Strichlisten
-  (Leistung). Trackpad-Bedienung, MacBook (laut Absprache nicht vorrangig).
+- Sehr viele Kontinente: geprüft mit 72 (Anlegen von 70 auf einmal ≈ 4 s, Globus flüssig);
+  vorgesehen sind über 130.000 (64 je Texturebene), darüber ungeprüft. Sehr lange Strichlisten. Trackpad-Bedienung, MacBook (laut Absprache nicht vorrangig).
 - Bedienung von Hand über längere Zeit (alle Prüfungen sind automatische Mausabläufe plus
   Bildkontrolle; die Bedienwege sind dieselben).
 - Sehr kleine oder sehr große Planeten in Kombination mit großen Kontinenten (Verzerrung der
@@ -114,5 +115,7 @@ Blender-Skript (`tools/blender/make_target_assets.py`, fester Ausgangswert).
 
 Zwei Prüfrunden mit getrennten Prüfern und Gegenprüfung. Runde 1: 18 bestätigte Befunde,
 alle behoben (u. a. Schutz gegen ältere Erzeugung, Live/Neuberechnung bei Land und Ebene,
-abgebrochenes Ziehen, Name beim falschen Kontinent, Ersatzdatei nach Beschädigung). Runde 2:
-siehe Abschnitt unten.
+abgebrochenes Ziehen, Name beim falschen Kontinent, Ersatzdatei nach Beschädigung). Runde 2 (Änderungen seither): 4 bestätigte Befunde, alle behoben – die Absicherung der
+Texturebenen hätte die Kontinentzahl wieder begrenzt (jetzt 8 × 8 Kontinente je Ebene, nichts
+wird weggelassen); beim Mitwandern ziehen übergeordnete Ausschnitte mit (Umgebung vollständig,
+Herauszoomen an derselben Stelle); Sprung über die Übersichtskarte wird gespeichert.
