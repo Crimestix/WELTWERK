@@ -11,6 +11,10 @@ export_credentials.cfg
 /assets/style_c/source/
 /assets/target/source/*
 !/assets/target/source/generated.json
+# Kartentexturen: Higgsfield-Originale und Vorschauen nicht im Repository, nur das Protokoll
+/assets/map/source/*
+!/assets/map/source/generated.json
+!/assets/map/source/erosion_lauf_*.json
 
 # Erzeugte Programme
 /build/

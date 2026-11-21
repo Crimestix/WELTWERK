@@ -50,6 +50,29 @@ uniform sampler2D canopy_broadleaf : source_color, filter_linear_mipmap_anisotro
 uniform sampler2D canopy_conifer : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float conifer_bias = 0.0;   // kälteres Klima: mehr Nadelwald
 
+// --- Kartenbestand (assets/map/) -----------------------------------------------------------------
+// Gestaltungsvariante: 0 = gemalt (Farben aus Regeln, Kleinrelief aus Erosionskacheln),
+// 1 = Luftbild (Fels, Wald, Wiese, Boden, Küste aus gekachelten Luftbild-Texturen, gleiches Relief).
+uniform int map_style = 1;
+// Erosionskacheln (eigene Erzeugung, Blender): Normale und Masken (R Rinne, G Grat, B Steilheit, A Höhe).
+uniform sampler2D erosion_alpine_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D erosion_alpine_masks : hint_default_black, filter_linear_mipmap, repeat_enable;
+uniform sampler2D erosion_hills_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D erosion_hills_masks : hint_default_black, filter_linear_mipmap, repeat_enable;
+// Kachelbreite in Bildpunkten (die Kachel folgt dem Zoom in Zweierschritten).
+uniform float detail_px = 260.0;
+uniform float relief_strength = 1.0;
+uniform float rock_px = 320.0;
+uniform float meadow_px = 300.0;
+uniform float forest_px = 160.0;
+uniform sampler2D tex_rock : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_snow : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_forest : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_conifer : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_meadow : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_dry : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D tex_shallows : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+
 varying vec3 world_pos;
 varying vec2 uv_v;
 varying float mark;
@@ -120,6 +143,51 @@ float screen_pattern(vec2 m, float px_m, float px, float salt) {
 	return mix(a, b, t);
 }
 
+mat2 rot2(float a) {
+	return mat2(vec2(cos(a), sin(a)), vec2(-sin(a), cos(a)));
+}
+
+// Kleinrelief aus einer Erosionskachel: je Zoomstufe eine gedrehte, versetzte Abtastung, zwei
+// Stufen überblendet. Gibt die Steigung (dh/dx, dh/dz) zurück, mask: Rinne, Grat, Steilheit, Höhe.
+vec2 relief(sampler2D nmap, sampler2D masks, vec2 m, float px_m, float px, float salt, out vec4 mask) {
+	float lvl = log2(max(px_m * px, 1.0));
+	float l0 = floor(lvl);
+	float t = lvl - l0;
+	vec2 grad = vec2(0.0);
+	mask = vec4(0.0);
+	for (int k = 0; k < 2; k++) {
+		float level = l0 + float(k);
+		float w = k == 0 ? 1.0 - t : t;
+		mat2 r = rot2(level * 1.7 + salt);
+		vec2 uv = r * (m / exp2(level)) + vec2(0.37, 0.71) * (level + salt);
+		vec2 nxy = texture(nmap, uv).xy * 2.0 - 1.0;
+		float nz = sqrt(max(1.0 - dot(nxy, nxy), 0.04));
+		vec2 g_tex = vec2(-nxy.x, nxy.y) / nz;
+		grad += (transpose(r) * g_tex) * w;
+		mask += texture(masks, uv) * w;
+	}
+	return grad;
+}
+
+// Luftbild-Textur in festen Metern, Kachel etwa px Bildpunkte, zwei Zoomstufen überblendet; je
+// Stufe zwei gedrehte Abtastungen, von großem Rauschen gemischt (bricht Wiederholungsmuster).
+vec3 tex_world(sampler2D tex, vec2 m, float px_m, float px, float salt) {
+	float lvl = log2(max(px_m * px, 1.0));
+	float l0 = floor(lvl);
+	float t = lvl - l0;
+	vec3 c = vec3(0.0);
+	for (int k = 0; k < 2; k++) {
+		float level = l0 + float(k);
+		float w = k == 0 ? 1.0 - t : t;
+		float tile = exp2(level);
+		vec2 uv1 = rot2(level * 2.3 + salt) * (m / tile) + vec2(0.13, 0.57) * salt;
+		vec2 uv2 = rot2(level * 2.3 + salt + 2.1) * (m / (tile * 0.77)) + vec2(0.61, 0.29) * salt;
+		float b = smoothstep(0.3, 0.7, g_noise(m / (tile * 1.9) + salt + level));
+		c += mix(texture(tex, uv1).rgb, texture(tex, uv2).rgb, b) * w;
+	}
+	return c;
+}
+
 void vertex() {
 	ivec2 p = ivec2(round(UV * float(res - 1)));
 	vec4 d = texelFetch(data_tex, p, 0);
@@ -163,6 +231,32 @@ void fragment() {
 
 	vec2 m = to_meters(xz);
 	float px_m = max(length(fwidth(m)), 0.001);
+	float land = step(0.0, height_f);
+
+	// --- Reliefdetail aus den Erosionskacheln -------------------------------------------------------
+	// Unter der Rasterweite (Kontinent ≈ 3 km) fehlt jedes Kleinrelief. Die Kacheln liefern Grate,
+	// Rinnen und Schuttfächer als Darstellung (Material), nicht als Geografie; ihre Größe folgt dem
+	// Zoom in festen Metern (zwei Stufen überblendet), so bleibt das Relief etwa 10–40 Bildpunkte grob.
+	float mountain = clamp(smoothstep(450.0, 1700.0, height_f) * 0.75 + smoothstep(0.05, 0.3, slope) * 0.5, 0.0, 1.0) * land;
+	float upland = smoothstep(120.0, 600.0, height_f) * (1.0 - mountain) * land;
+	// Nur rechnen, wo es wirkt (Ebenen und Meer sparen die Abtastungen).
+	vec4 alp = vec4(0.0);
+	vec2 g_alp = vec2(0.0);
+	if (mountain > 0.001) {
+		g_alp = relief(erosion_alpine_normal, erosion_alpine_masks, m, px_m, detail_px, 0.0, alp);
+	}
+	vec4 hil = vec4(0.0);
+	vec2 g_hil = vec2(0.0);
+	if (upland > 0.001) {
+		g_hil = relief(erosion_hills_normal, erosion_hills_masks, m, px_m, detail_px * 0.8, 3.0, hil);
+	}
+	vec2 g = g_alp * mountain * relief_strength + g_hil * upland * relief_strength * 0.5;
+	vec3 nd = normalize(n - vec3(g.x, 0.0, g.y));
+	float d_slope = 1.0 - nd.y;
+	// Rinnen (Abfluss) und Grate der Kachel, gewichtet nach Gebirge/Hügelland.
+	float gully = alp.r * mountain + hil.r * upland * 0.7;
+	float crest = alp.g * mountain + hil.g * upland * 0.6;
+	float steep = alp.b * mountain;
 
 	// --- Wiesen und Grasland: Klima, Höhe, Feuchte, große Flecken --------------------------------
 	float vary = 0.0;
@@ -172,32 +266,53 @@ void fragment() {
 		vary += (m_noise(m / lam + float(o) * 13.7) - 0.5) * fade * (0.5 + 0.12 * float(o));
 		lam *= 4.0;
 	}
-	float moist = clamp(0.62 - dryness * 0.8 + valley * 0.3 + vary * 0.35, 0.0, 1.0);
-	vec3 grass = mix(map_meadow_mid, map_meadow_light, clamp(0.5 + vary * 1.2, 0.0, 1.0));
-	grass = mix(grass, lush_color, smoothstep(0.5, 0.95, moist) * 0.6);
-	float dry_patch = smoothstep(0.5, 0.8, m_noise(m / 60000.0 + 31.0) * 0.6 + m_noise(m / 14000.0 + 5.0) * 0.4);
-	grass = mix(grass, steppe_color, clamp(smoothstep(0.25, 0.0, moist) * 0.6 + dry_patch * 0.2 * smoothstep(0.25, 0.6, dryness), 0.0, 0.6));
-	// Höhenstufen: Hochland olivbraun, damit Ebenen und Bergland auseinanderzuhalten sind.
-	grass = mix(grass, highland_color, smoothstep(1000.0, 2400.0, height_f) * 0.5);
-	// Feine Flecken etwa drei Bildpunkte groß – Lebendigkeit wie auf einer gemalten Karte.
+	float moist = clamp(0.62 - dryness * 0.8 + valley * 0.35 + vary * 0.35 + gully * 0.5 - crest * 0.25, 0.0, 1.0);
 	float speck = screen_pattern(m, px_m, 3.0, 2.0);
 	float mottle = screen_pattern(m, px_m, 12.0, 6.0);
-	grass *= 0.84 + 0.2 * speck + 0.14 * mottle;
+	// Gemalte Wiesenfarbe nach Regeln (Variante B; in A als grüne Grundtönung beigemischt).
+	vec3 painted = mix(map_meadow_mid, map_meadow_light, clamp(0.5 + vary * 1.2, 0.0, 1.0));
+	painted = mix(painted, lush_color, smoothstep(0.5, 0.95, moist) * 0.6);
+	float dry_patch = smoothstep(0.5, 0.8, m_noise(m / 60000.0 + 31.0) * 0.6 + m_noise(m / 14000.0 + 5.0) * 0.4);
+	painted = mix(painted, steppe_color, clamp(smoothstep(0.3, 0.0, moist) * 0.6 + dry_patch * 0.2 * smoothstep(0.25, 0.6, dryness), 0.0, 0.6));
+	vec3 grass;
+	if (map_style == 1) {
+		// Luftbild: Wiesenmosaik und trockener Boden nach Feuchte; die gemalte Tönung hält das
+		// Tiefland grün wie in der Referenz, die Textur liefert Mosaik und Gebüsch.
+		vec3 meadow = tex_world(tex_meadow, m, px_m, meadow_px, 5.0);
+		vec3 dry = tex_world(tex_dry, m, px_m, meadow_px, 11.0);
+		grass = mix(dry, meadow, smoothstep(0.0, 0.3, moist + (mottle - 0.5) * 0.25));
+		float lum = dot(grass, vec3(0.3, 0.55, 0.15));
+		grass = mix(grass, painted * (lum / max(dot(painted, vec3(0.3, 0.55, 0.15)), 0.01)), 0.45);
+	} else {
+		grass = painted * (0.84 + 0.2 * speck + 0.14 * mottle);
+	}
+	// Höhenstufen: Hochland olivbraun, damit Ebenen und Bergland auseinanderzuhalten sind.
+	grass = mix(grass, highland_color, smoothstep(1000.0, 2400.0, height_f) * 0.45);
 
-	// --- Wald: dunkle, gekörnte Massen mit lockerem Rand ------------------------------------------
-	// Walddichte als Anteil: Ein Punkt ist Wald, wo ein kleinteiliges Gehölzmuster unter der Dichte
-	// liegt – dichter Wald ist geschlossen, lichter zerfällt in Haine und Gehölze, der Rand franst aus.
+	// --- Wald: Dichte als Anteil, im Gebirge in den Rinnen, nicht auf den Graten -----------------------
 	float clumps = screen_pattern(m, px_m, 4.0, 9.0) * 0.45 + screen_pattern(m, px_m, 14.0, 13.0) * 0.35
 		+ screen_pattern(m, px_m, 45.0, 17.0) * 0.2;
 	float density = forest_f * 1.15 + (1.0 - smoothstep(0.2, 0.6, dryness)) * 0.12 * smoothstep(0.0, 0.25, forest_f + moist * 0.2);
+	// Im Gebirge: Rinnen und Unterhänge bewaldet (unter der Baumgrenze), Grate kahl.
+	float below_treeline = 1.0 - smoothstep(treeline - 150.0, treeline + 350.0, height_f);
+	density += (gully * 1.1 - crest * 0.9 + 0.15) * 0.7 * mountain * below_treeline;
 	float cover = smoothstep(clumps - 0.06, clumps + 0.06, density);
 	float conifer = clamp(0.1 + smoothstep(400.0, 1500.0, height_f) * 0.85 + conifer_bias * 0.5 + vary * 0.3, 0.0, 1.0);
-	float crowns = screen_pattern(m, px_m, 3.2, 21.0);
-	float crowns2 = screen_pattern(m, px_m, 9.0, 33.0);
-	float lit = smoothstep(0.3, 0.85, crowns * 0.65 + crowns2 * 0.35);
-	vec3 broad = mix(forest_dark, forest_light, lit) * (0.92 + vary * 0.4);
-	vec3 needles = mix(conifer_dark, conifer_light, lit);
-	vec3 trees = mix(broad, needles, smoothstep(0.45, 0.7, conifer));
+	vec3 trees = forest_dark;
+	if (cover < 0.001) {
+	} else if (map_style == 1) {
+		vec3 b = tex_world(tex_forest, m, px_m, forest_px, 7.0);
+		vec3 c = tex_world(tex_conifer, m, px_m, forest_px, 13.0);
+		// Etwas dunkler als das Luftbild: Waldmassen sollen sich wie in der Referenz abheben.
+		trees = mix(b, c, smoothstep(0.45, 0.7, conifer)) * 0.82;
+	} else {
+		float crowns = screen_pattern(m, px_m, 3.2, 21.0);
+		float crowns2 = screen_pattern(m, px_m, 9.0, 33.0);
+		float lit = smoothstep(0.3, 0.85, crowns * 0.65 + crowns2 * 0.35);
+		vec3 broad = mix(forest_dark, forest_light, lit) * (0.92 + vary * 0.4);
+		vec3 needles = mix(conifer_dark, conifer_light, lit);
+		trees = mix(broad, needles, smoothstep(0.45, 0.7, conifer));
+	}
 	// Nah genug für einzelne Kronen: Luftbild in Metern.
 	float photo = 1.0 - smoothstep(1.2, 3.0, px_m);
 	if (photo > 0.0) {
@@ -209,47 +324,70 @@ void fragment() {
 
 	// --- Fels, Geröll, Schnee ---------------------------------------------------------------------
 	float rocky = screen_pattern(m, px_m, 4.0, 41.0);
-	vec3 rock = mix(rock_dark_color, rock_color, smoothstep(0.25, 0.8, rocky + clamp(-curv / 60.0, -0.3, 0.3)));
-	rock = mix(rock, scree_color, smoothstep(0.6, 0.95, rocky) * 0.5);
 	float alpine = smoothstep(treeline - 200.0, treeline + 500.0, height_f + vary * 300.0);
-	// Fels erst im Bergland: niedrige Hügel bleiben grün, auch wenn sie überhöht steil wirken.
-	// Steile Flanken im Bergland felsig, Grate (negative Krümmung) zuerst – so zeichnen sich
-	// Kämme und Seitengrate ab, Täler bleiben grün.
+	// Fels auf Graten und steilen Flanken (auch im Kleinrelief der Kachel), Täler bleiben grün;
+	// der Übergang folgt der Kachelstruktur statt einer weichen Höhenlinie.
 	float ridge = clamp(-curv / 150.0, 0.0, 1.0);
-	float rock_w = max(smoothstep(0.26, 0.5, slope + ridge * 0.15 + (rocky - 0.5) * 0.12) * smoothstep(900.0, 1700.0, height_f), alpine * 0.85);
-	float snow_w = smoothstep(snowline - 120.0, snowline + 200.0, height_f + (vary - 0.0) * 500.0 + clamp(-curv, -100.0, 300.0))
-		* (1.0 - smoothstep(0.62, 0.8, slope));
+	float rock_score = d_slope * 1.3 + ridge * 0.15 + crest * 0.45 + steep * 0.3 - gully * 0.5 + (rocky - 0.5) * 0.12;
+	float rock_w = max(smoothstep(0.32, 0.55, rock_score) * smoothstep(700.0, 1500.0, height_f), alpine * 0.85);
+	rock_w = max(rock_w, smoothstep(0.6, 0.85, d_slope + crest * 0.2) * smoothstep(80.0, 300.0, height_f) * 0.7);
+	// Massive: Fels folgt dem Kleinrelief – Grate und Steilflanken felsig, Rinnen grün.
+	float massif = mountain * smoothstep(500.0, 1200.0, height_f)
+		* smoothstep(0.3, 0.58, crest * 0.75 + d_slope * 1.1 - gully * 0.9 + (rocky - 0.5) * 0.2 + 0.05);
+	rock_w = max(rock_w, massif);
+	float snow_score = height_f + vary * 400.0 + clamp(-curv, -100.0, 300.0) + (crest - gully) * 500.0 * mountain;
+	float snow_w = smoothstep(snowline - 150.0, snowline + 150.0, snow_score) * (1.0 - smoothstep(0.62, 0.85, d_slope));
+	vec3 snow = snow_color;
+	if (map_style == 1) {
+		snow = mix(snow_color, tex_world(tex_snow, m, px_m, rock_px, 23.0), 0.6);
+	}
 
+	vec3 rock = rock_color;
+	if (rock_w < 0.001 && height_f > 150.0) {
+	} else if (map_style == 1) {
+		rock = tex_world(tex_rock, m, px_m, rock_px, 17.0);
+		// Heller Kalk/Granit wie in der Referenz; Grate hell, Rinnen schattig.
+		rock = rock * 1.18 * (0.88 + 0.32 * crest - 0.22 * gully);
+	} else {
+		rock = mix(rock_dark_color, rock_color, smoothstep(0.2, 0.8, rocky * 0.5 + crest * 0.6 - gully * 0.4 + 0.2));
+		rock = mix(rock, scree_color, smoothstep(0.55, 0.9, alp.a * (1.0 - gully)) * 0.45);
+	}
 	vec3 c = mix(ground, rock, rock_w);
-	c = mix(c, snow_color, snow_w);
+	c = mix(c, snow, snow_w);
 
-	// --- Küste: schmaler heller Strand, wo Land an Meer grenzt; Meeresgrund unter Wasser ---------
+	// --- Küste: Strand in flachen Buchten, Fels an steilen Küsten; Meeresgrund unter Wasser --------
 	float sea_near = 0.0;
 	for (int k = 0; k < 8; k++) {
 		float a = float(k) * 0.785398;
 		vec2 o = vec2(cos(a), sin(a)) * du * 1.6;
 		sea_near = max(sea_near, 1.0 - smoothstep(-6.0, 0.0, texture(data_lin, tuv + o).r));
 	}
-	float beach = sea_near * (1.0 - smoothstep(4.0, 60.0, height_f)) * (1.0 - smoothstep(0.35, 0.6, slope)) * step(0.0, height_f);
-	c = mix(c, sand_color * (0.92 + 0.12 * speck), beach * 0.85);
+	float coast_band = sea_near * (1.0 - smoothstep(4.0, 80.0, height_f)) * land;
+	float cliff = smoothstep(0.25, 0.5, d_slope + crest * 0.3);
+	vec3 beach_c = sand_color * (0.92 + 0.12 * speck);
+	vec3 coast_rock = rock;
+	// (Die Strand-Textur aus dem Bestand zeigt Kiesel aus Bodennähe – im Kartenmaßstab falsch,
+	// daher heller Sand nach Regeln; Steilküsten zeigen den Fels.)
+	c = mix(c, mix(beach_c, coast_rock, cliff), coast_band * 0.85);
 	float under = 1.0 - smoothstep(-2.0, 0.5, height_f);
 	vec3 seabed = mix(sand_color, seabed_color, smoothstep(0.0, 60.0, -height_f));
+	if (map_style == 1) {
+		seabed = mix(tex_world(tex_shallows, m, px_m, meadow_px, 31.0), seabed_color, smoothstep(10.0, 120.0, -height_f));
+	}
 	c = mix(c, seabed, under);
 
 	// Ufer von Binnengewässern: dunklerer, feuchter Saum.
 	float wet = smoothstep(0.0, 1.5, water_f);
 	c = mix(c, c * vec3(0.72, 0.8, 0.72), wet * 0.6);
 
-	// --- Kartenschummerung (Licht von Nordwesten) und Kammlicht -----------------------------------
-	// Für die Schummerung stärker geneigt als dargestellt: große, flache Gebirge (wenige Grad
-	// Neigung auf Kontinentebene) sollen sich lesen lassen wie auf einer gemalten Karte.
-	vec3 ns = normalize(vec3(n.x * 2.6, n.y, n.z * 2.6));
+	// --- Kartenschummerung (Licht von Nordwesten) mit Kleinrelief ----------------------------------
+	vec3 ns = normalize(vec3(nd.x * 2.6, nd.y, nd.z * 2.6));
 	vec3 light = normalize(vec3(-0.65, 0.9, -0.75));
-	float shade = clamp(dot(ns, light) / light.y, 0.3, 1.2);
-	float land = step(0.0, height_f);
+	float shade = clamp(dot(ns, light) / light.y, 0.25, 1.25);
 	c *= mix(1.0, shade, hillshade * land);
-	// Täler etwas dunkler, Grate heller: Gebirge wirken plastisch auch bei flachem Licht.
+	// Täler etwas dunkler, Grate heller; Rinnen der Kachel als Schattenlinien.
 	c *= 1.0 + clamp(-curv / 400.0, -0.18, 0.12) * land * smoothstep(100.0, 600.0, height_f);
+	c *= 1.0 - gully * 0.22 * (1.0 - snow_w * 0.5);
 
 	float rough = mix(0.95, 0.7, snow_w);
 
@@ -270,8 +408,8 @@ void fragment() {
 	}
 
 	ALBEDO = c;
-	// Glatte Normale für das Sonnenlicht (Schatten der Gebirge, keine Facetten).
-	NORMAL = normalize((VIEW_MATRIX * vec4(n, 0.0)).xyz);
+	// Normale mit Kleinrelief für das Sonnenlicht (Schatten der Grate).
+	NORMAL = normalize((VIEW_MATRIX * vec4(nd, 0.0)).xyz);
 	ROUGHNESS = rough;
 	SPECULAR = 0.25;
 }

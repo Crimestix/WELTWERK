@@ -15,12 +15,12 @@ uniform float plane_size = 1000.0;
 uniform float height_scale = 1.0;
 uniform bool is_lake = false;
 // Breite des Küstenscheins als Anteil des Ausschnitts.
-uniform float glow_width = 0.022;
+uniform float glow_width = 0.03;
 
 uniform vec3 shallow_color : source_color = vec3(0.14, 0.50, 0.52);
-uniform vec3 shelf_color : source_color = vec3(0.06, 0.32, 0.43);
-uniform vec3 deep_color : source_color = vec3(0.025, 0.10, 0.21);
-uniform vec3 abyss_color : source_color = vec3(0.015, 0.06, 0.15);
+uniform vec3 shelf_color : source_color = vec3(0.05, 0.33, 0.38);
+uniform vec3 deep_color : source_color = vec3(0.03, 0.15, 0.22);
+uniform vec3 abyss_color : source_color = vec3(0.02, 0.10, 0.17);
 uniform vec3 foam_color : source_color = vec3(0.86, 0.90, 0.86);
 
 varying vec3 world_pos;

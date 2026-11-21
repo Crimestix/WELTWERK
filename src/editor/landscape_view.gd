@@ -56,6 +56,14 @@ var brush_strength := 1.0
 var generator_seed := 0
 ## Ausgangswert der Grundform (für Schutzbereiche: diese Grundform bleibt dort erhalten).
 var continent_seed := 0
+## Gestaltung der groben Ausschnitte: 0 gemalt, 1 Luftbild (beide mit Erosionsrelief). Gewählt:
+## Luftbild (Vergleich 21. 11. 2026, docs/BERICHT_KARTENGRAFIK.md).
+var map_style := 1:
+	set(value):
+		map_style = value
+		for m in [_coarse_material, _context_material]:
+			if m:
+				m.set_shader_parameter("map_style", value)
 var show_marks := true:
 	set(value):
 		show_marks = value
@@ -121,6 +129,8 @@ func _ready() -> void:
 		m.set_shader_parameter("canopy_conifer", needles)
 	_material = _coarse_material
 	_ground.material_override = _material
+	_apply_map_assets(_coarse_material)
+	_coarse_material.set_shader_parameter("map_style", map_style)
 
 	_context = MeshInstance3D.new()
 	_context.name = "Context"
@@ -129,6 +139,8 @@ func _ready() -> void:
 	_context_material.set_shader_parameter("is_context", true)
 	_context_material.set_shader_parameter("show_marks", false)
 	_context.material_override = _context_material
+	_apply_map_assets(_context_material)
+	_context_material.set_shader_parameter("map_style", map_style)
 	_context.visible = false
 	add_child(_context)
 
@@ -546,6 +558,26 @@ func _upload(rect: Rect2i = Rect2i()) -> void:
 ## Umgebung neu zeigen (nach einer Bearbeitung, die über den Ausschnitt hinausreicht).
 func update_context(parent: TerrainWindow) -> void:
 	_show_context(parent)
+
+
+## Kartenbestand (assets/map/, siehe README dort) an ein Kartenmaterial binden. Fehlt eine Datei,
+## bleibt der Standard des Shaders (flache Normale, weiß) – die gemalte Variante braucht nur die
+## Erosionskacheln.
+const MAP := "res://assets/map/"
+const MAP_TEXTURES := {
+	"erosion_alpine_normal": "erosion_alpine_normal.png", "erosion_alpine_masks": "erosion_alpine_masks.png",
+	"erosion_hills_normal": "erosion_hills_normal.png", "erosion_hills_masks": "erosion_hills_masks.png",
+	"tex_rock": "rock_massif.jpg", "tex_snow": "alpine_snow.jpg", "tex_forest": "forest_mixed.jpg",
+	"tex_conifer": "forest_conifer.jpg", "tex_meadow": "meadow_mosaic.jpg", "tex_dry": "dry_ground.jpg",
+	"tex_shallows": "coast_shallows.jpg",
+}
+
+
+static func _apply_map_assets(material: ShaderMaterial) -> void:
+	for slot in MAP_TEXTURES:
+		var tex := TargetMaterials.texture(MAP + MAP_TEXTURES[slot])
+		if tex:
+			material.set_shader_parameter(slot, tex)
 
 
 ## Gröberer Ausschnitt als Umgebung: gleiche Höhenskala wie der aktuelle, horizontal gestreckt,

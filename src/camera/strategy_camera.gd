@@ -235,7 +235,8 @@ func current_pitch() -> float:
 
 ## 0 ganz nah … 1 fern (für Neigung und Bildwinkel).
 func _zoom_t() -> float:
-	return smoothstep(min_distance, lerpf(min_distance, max_distance, 0.6), _distance)
+	# Erst ganz nah flacher und weiter: in Arbeitsentfernung bleibt der Kartenblick steil.
+	return smoothstep(min_distance, lerpf(min_distance, max_distance, 0.3), _distance)
 
 
 func _view_direction() -> Vector3:

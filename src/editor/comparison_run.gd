@@ -19,6 +19,11 @@ const MOUNTAINS := [
 	[Vector2(150, 110), Vector2(260, 90), Vector2(360, 120), Vector2(460, 175), Vector2(560, 240), Vector2(650, 300), Vector2(740, 360), Vector2(830, 430), Vector2(900, 500)],
 	[Vector2(900, 500), Vector2(980, 580), Vector2(1060, 650), Vector2(1150, 700), Vector2(1240, 760), Vector2(1330, 830), Vector2(1400, 880)],
 	[Vector2(1000, 760), Vector2(1080, 820), Vector2(1160, 860)],
+	# Breite Massive wie in der Referenz: Nebenketten neben dem Hauptkamm.
+	[Vector2(120, 230), Vector2(230, 200), Vector2(330, 250), Vector2(430, 300)],
+	[Vector2(300, 60), Vector2(420, 80), Vector2(540, 130)],
+	[Vector2(1080, 560), Vector2(1200, 600), Vector2(1330, 660), Vector2(1430, 700)],
+	[Vector2(420, 760), Vector2(560, 820), Vector2(700, 860)],
 ]
 const HILLS := [
 	[Vector2(420, 700), Vector2(560, 760), Vector2(700, 800)],
@@ -113,7 +118,7 @@ func run(dir: String) -> void:
 	var t := Time.get_ticks_usec()
 	for chain in MOUNTAINS:
 		editor._use_tool("gen_mountains")
-		editor.ui.set_brush(0.075, 0.85)
+		editor.ui.set_brush(0.085, 0.85)
 		await _ground_stroke(chain)
 	timing["Gebirge malen"] = (Time.get_ticks_usec() - t) / 1000.0
 	for chain in HILLS:
@@ -156,6 +161,10 @@ func run(dir: String) -> void:
 	await editor._frames(30)
 	await editor._shot(dir.path_join("kontinent_nah.jpg"))
 
+	# Repräsentativer Ausschnitt (Gebirge, Tal, Wald, Küste im Nordwesten) in beiden
+	# Gestaltungsvarianten unter gleichen Bedingungen; dazu der ganze Kontinent je Variante.
+	await _variants(dir, timing)
+
 	# 4 Bearbeiten, Rückgängig, Speichern.
 	editor.camera_rig.jump_to(Vector3.ZERO, editor.camera_rig.max_distance)
 	_frame()
@@ -180,6 +189,93 @@ func run(dir: String) -> void:
 	for key in checks:
 		print("  %s %s" % ["ok  " if checks[key] else "FEHLT", key])
 	editor.get_tree().quit()
+
+
+## Ausschnitt der Referenz (Bildpunkte), der für den Variantenvergleich vergrößert wird.
+const SECTION := Rect2(120, 40, 500, 300)
+const STYLES := {"B_gemalt": 0, "A_luftbild": 1}
+
+
+func _variants(dir: String, timing: Dictionary) -> void:
+	# Lage und Abstand des Ausschnitts einmal aus der Referenzansicht bestimmen – gleich für beide.
+	_frame()
+	await editor._frames(5)
+	var center := ground_of_ref(SECTION.get_center())
+	var distance := _section_distance()
+	_wanted_width = ground_of_ref(SECTION.position + Vector2(0, SECTION.size.y * 0.5)).distance_to(
+		ground_of_ref(SECTION.end - Vector2(0, SECTION.size.y * 0.5)))
+	for style_name in STYLES:
+		editor.landscape.map_style = STYLES[style_name]
+		_frame()
+		await editor._frames(20)
+		await editor._shot(dir.path_join("kontinent_%s.jpg" % style_name))
+		var results := {}
+		await editor._measure(style_name, results)
+		timing["Bilder/s Kontinent %s" % style_name] = results[style_name]["fps"]
+		# Abstand so lange nachführen, bis die Bodenbreite in Bildmitte der des Referenzausschnitts
+		# entspricht (Bildwinkel und Neigung ändern sich mit dem Abstand).
+		var d := distance
+		for k in 5:
+			editor.camera_rig.jump_to(editor.landscape.to_render(center.x, center.y), d)
+			await editor._frames(2)
+			var seen := _ground_width()
+			if seen > 0.0:
+				d *= clampf(_wanted_width / seen, 0.5, 2.0)
+		await editor._frames(25)
+		await editor._shot(dir.path_join("ausschnitt_%s.jpg" % style_name))
+	editor.landscape.map_style = 1
+	_section_sheet(dir)
+
+
+var _wanted_width := 0.0
+
+
+## Bodenbreite (Kontinentmeter) zwischen linkem und rechtem Bildrand auf halber Höhe.
+func _ground_width() -> float:
+	var view: Vector2 = editor.get_viewport().get_visible_rect().size
+	var cam: Camera3D = editor.camera_rig.camera
+	var plane := Plane(Vector3.UP, 0.0)
+	var a: Variant = plane.intersects_ray(cam.project_ray_origin(Vector2(0, view.y * 0.5)), cam.project_ray_normal(Vector2(0, view.y * 0.5)))
+	var b: Variant = plane.intersects_ray(cam.project_ray_origin(Vector2(view.x, view.y * 0.5)), cam.project_ray_normal(Vector2(view.x, view.y * 0.5)))
+	if a == null or b == null:
+		return 0.0
+	return (a as Vector3).distance_to(b) / editor.landscape.units_per_m
+
+
+## Abstand, bei dem der Referenzausschnitt etwa die Bildbreite füllt (Arbeitsentfernung, näher).
+func _section_distance() -> float:
+	var view: Vector2 = editor.get_viewport().get_visible_rect().size
+	var cam: Camera3D = editor.camera_rig.camera
+	var a := ground_of_ref(SECTION.position)
+	var b := ground_of_ref(SECTION.position + Vector2(SECTION.size.x, 0.0))
+	var width: float = a.distance_to(b) * editor.landscape.units_per_m
+	return width * 1.05 / (view.x / view.y * 2.0 * tan(deg_to_rad(cam.fov * 0.5)))
+
+
+## Referenzausschnitt | Variante A | Variante B nebeneinander.
+func _section_sheet(dir: String) -> void:
+	var ref := Image.load_from_file(ProjectSettings.globalize_path(REFERENCE))
+	if ref == null:
+		return
+	var crop := ref.get_region(Rect2i(SECTION))
+	var h := 560
+	var parts := [crop]
+	for style_name in ["A_luftbild", "B_gemalt"]:
+		var img := Image.load_from_file(dir.path_join("ausschnitt_%s.jpg" % style_name))
+		if img:
+			parts.append(img)
+	var total := 0
+	for p in parts:
+		p.convert(Image.FORMAT_RGB8)
+		p.resize(int(p.get_width() * float(h) / p.get_height()), h, Image.INTERPOLATE_LANCZOS)
+		total += p.get_width() + 8
+	var out := Image.create(total, h, false, Image.FORMAT_RGB8)
+	out.fill(Color(0.06, 0.05, 0.04))
+	var x := 0
+	for p in parts:
+		out.blit_rect(p, Rect2i(Vector2i.ZERO, p.get_size()), Vector2i(x, 0))
+		x += p.get_width() + 8
+	out.save_jpg(dir.path_join("varianten.jpg"), 0.9)
 
 
 ## Kamera wie in der Referenz: das Kontinentfenster füllt die Bildbreite, Blick schräg von oben.

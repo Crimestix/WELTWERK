@@ -156,6 +156,10 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
   (Wählen, Verschieben, Punkte, Skalieren, Drehen, Löschen; Befehle replace/remove_stroke).
 - `src/editor/editor_ui.gd` – Oberfläche: Gruppenleiste links, Werkzeugleiste unten, Einstellungen
   erst nach Wahl, Hinweiszeile, Maßstab, Übersichtskarte; Symbole in `assets/ui/icons/*.svg`.
+- `assets/map/` – Kartenbestand der groben Ausschnitte (README dort): Erosionskacheln (eigene
+  Erzeugung `tools/blender/make_erosion_tiles.py`), Luftbild-Texturen (Higgsfield,
+  `tools/higgsfield_map_textures.py`, nahtlos mit `tools/make_seamless_textures.py`). Gestaltung
+  `LandscapeView.map_style` (1 Luftbild, Standard; 0 gemalt). Bericht `docs/BERICHT_KARTENGRAFIK.md`.
 - `src/editor/comparison_run.gd` (`--vergleich`), `recording_run.gd` (`--aufnahme`) – Vergleich mit
   der Kontinentalreferenz und aufgezeichneter Bedienablauf.
 - `docs/BERICHT_KONTINENTE.md` – Bericht des Kontinent-Auftrags; `docs/abnahme/`, `docs/stufen/` Bilder.
@@ -241,3 +245,6 @@ Weltdatei: `user://welt.json` (Windows `%APPDATA%\Godot\app_userdata\Weltwerk\we
   Flächen; Schutzschraffur nur beim Werkzeug „Schützen“; gezeichnete Umrisse werden vereinfacht;
   jedes Werkzeug merkt sich seine Größe; Gebirge folgt dem Strich als Kette; gezeichnete Kontinente
   ohne eigene Gebirge in der Grundform. Higgsfield nicht genutzt. Bericht `docs/BERICHT_KONTINENTEDITOR.md`.
+- 21. 11. 2026 – Auftrag Kartengrafik (Bestand produzieren und einbauen). Zwei Varianten im Editor
+  verglichen (A Luftbild, B gemalt, gleiche Erosionskacheln); gewählt A mit grüner Wiesentönung
+  aus B. Strandtextur verworfen (falscher Maßstab). Higgsfield: 26 Guthaben (Stand 527,85).

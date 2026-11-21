@@ -1,0 +1,11 @@
+{
+  "hills": {
+    "seed": 20261122,
+    "droplet_mean_abs_change_m": 1.969495819367845,
+    "natural_relief_m": 526.2028492024953,
+    "slope_deg_median": 18.473370492166453,
+    "slope_deg_p90": 22.506562646865397,
+    "outlet_share": 0.02074432373046875,
+    "seconds": 92.35480213165283
+  }
+}

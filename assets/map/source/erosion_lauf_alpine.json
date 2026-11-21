@@ -1,0 +1,11 @@
+{
+  "alpine": {
+    "seed": 20261121,
+    "droplet_mean_abs_change_m": 7.450816329161671,
+    "natural_relief_m": 1487.086852005411,
+    "slope_deg_median": 40.22283166851888,
+    "slope_deg_p90": 48.899691592240295,
+    "outlet_share": 0.014118194580078125,
+    "seconds": 102.34926891326904
+  }
+}
