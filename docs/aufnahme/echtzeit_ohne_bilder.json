@@ -1,0 +1,394 @@
+{
+  "dauer_s": 67.52,
+  "mit_bildern": false,
+  "gezeichnete_bilder": 3497,
+  "gespeicherte_bilder": 0,
+  "ausgelassen_weil_speicher_voll": 0,
+  "aufnahme_bilder_je_s_hoechstens": 0.0,
+  "bildgroesse": [
+    1280,
+    800
+  ],
+  "bildabstand_ms": {
+    "mittel": 19.31,
+    "median": 16.66,
+    "p95": 17.19,
+    "p99": 24.84,
+    "groesster": 1583.33
+  },
+  "pause_ab_ms": 100.0,
+  "pausen_anzahl": 13,
+  "pausen_gesamt_s": 9.142,
+  "pausen": [
+    {
+      "start_s": 2.281,
+      "duration_s": 1.072,
+      "handlung": "Klick „Neu zeichnen“",
+      "vorher": "Globus",
+      "nachher": "Kontinent 1.600 km, 0 Bearb.",
+      "ursache": "Klick „Neu zeichnen“: Kontinent geöffnet, Ansicht 1.600 km berechnet"
+    },
+    {
+      "start_s": 6.714,
+      "duration_s": 0.866,
+      "handlung": "Klick „Kontinent bearbeiten“",
+      "vorher": "Globus",
+      "nachher": "Kontinent 1.600 km, 0 Bearb.",
+      "ursache": "Klick „Kontinent bearbeiten“: Kontinent geöffnet, Ansicht 1.600 km berechnet"
+    },
+    {
+      "start_s": 13.987,
+      "duration_s": 0.296,
+      "handlung": "Umriss zeichnen",
+      "vorher": "Kontinent 1.600 km, 0 Bearb.",
+      "nachher": "Kontinent 1.600 km, 1 Bearb.",
+      "ursache": "Umriss zeichnen: neue Bearbeitung, Gelände neu berechnet"
+    },
+    {
+      "start_s": 25.156,
+      "duration_s": 1.583,
+      "handlung": "Gipfel aus den Geländedaten bestimmt",
+      "vorher": "Kontinent 1.600 km, 4 Bearb.",
+      "nachher": "Kontinent 1.600 km, 4 Bearb.",
+      "ursache": "Gipfel aus den Geländedaten bestimmt: Auswertung des Ablaufs (Gipfelsuche in drei Ausschnitten), keine Bedienung"
+    },
+    {
+      "start_s": 29.056,
+      "duration_s": 0.595,
+      "handlung": "Mausrad hinein → Region 200 km",
+      "vorher": "Kontinent 1.600 km, 4 Bearb.",
+      "nachher": "Ausschnitt 200 km, 4 Bearb.",
+      "ursache": "Mausrad hinein → Region 200 km: vertieft, Ausschnitt 200 km berechnet"
+    },
+    {
+      "start_s": 32.987,
+      "duration_s": 0.609,
+      "handlung": "Mausrad hinein → Ausschnitt 25 km",
+      "vorher": "Ausschnitt 200 km, 4 Bearb.",
+      "nachher": "Ausschnitt 25 km, 4 Bearb.",
+      "ursache": "Mausrad hinein → Ausschnitt 25 km: vertieft, Ausschnitt 25 km berechnet"
+    },
+    {
+      "start_s": 36.918,
+      "duration_s": 0.617,
+      "handlung": "Mausrad hinein → Detail 3,1 km",
+      "vorher": "Ausschnitt 25 km, 4 Bearb.",
+      "nachher": "Ausschnitt 3,1 km, 4 Bearb.",
+      "ursache": "Mausrad hinein → Detail 3,1 km: vertieft, Ausschnitt 3,1 km berechnet"
+    },
+    {
+      "start_s": 46.349,
+      "duration_s": 0.41,
+      "handlung": "Strich „Senken“",
+      "vorher": "Ausschnitt 3,1 km, 5 Bearb.",
+      "nachher": "Ausschnitt 3,1 km, 6 Bearb.",
+      "ursache": "Strich „Senken“: neue Bearbeitung, Gelände neu berechnet"
+    },
+    {
+      "start_s": 48.833,
+      "duration_s": 0.77,
+      "handlung": "Klick „Rückgängig“",
+      "vorher": "Ausschnitt 3,1 km, 6 Bearb.",
+      "nachher": "Ausschnitt 3,1 km, 5 Bearb.",
+      "ursache": "Klick „Rückgängig“: Bearbeitung entfernt, Gelände neu berechnet"
+    },
+    {
+      "start_s": 51.283,
+      "duration_s": 0.775,
+      "handlung": "Klick „Wiederholen“",
+      "vorher": "Ausschnitt 3,1 km, 5 Bearb.",
+      "nachher": "Ausschnitt 3,1 km, 6 Bearb.",
+      "ursache": "Klick „Wiederholen“: neue Bearbeitung, Gelände neu berechnet"
+    },
+    {
+      "start_s": 56.268,
+      "duration_s": 0.291,
+      "handlung": "Mausrad hinaus",
+      "vorher": "Ausschnitt 3,1 km, 6 Bearb.",
+      "nachher": "Ausschnitt 25 km, 6 Bearb.",
+      "ursache": "Mausrad hinaus: herausgezoomt, Ausschnitt 25 km berechnet"
+    },
+    {
+      "start_s": 58.503,
+      "duration_s": 1.136,
+      "handlung": "Mausrad hinaus",
+      "vorher": "Ausschnitt 25 km, 6 Bearb.",
+      "nachher": "Ausschnitt 200 km, 6 Bearb.",
+      "ursache": "Mausrad hinaus: herausgezoomt, Ausschnitt 200 km berechnet"
+    },
+    {
+      "start_s": 61.59,
+      "duration_s": 0.122,
+      "handlung": "Mausrad hinaus",
+      "vorher": "Ausschnitt 200 km, 6 Bearb.",
+      "nachher": "Kontinent 1.600 km, 6 Bearb.",
+      "ursache": "Mausrad hinaus: herausgezoomt, Ausschnitt 1.600 km berechnet"
+    }
+  ],
+  "ruckler": {
+    "bereich_ms": [
+      50.0,
+      100.0
+    ],
+    "anzahl": 4,
+    "gesamt_s": 0.251,
+    "beim_malen": 3,
+    "je_handlung": {
+      "Regler „Breitengrad“ ziehen": {
+        "anzahl": 1,
+        "gesamt_ms": 60.4,
+        "groesster_ms": 60.4
+      },
+      "Strich „Gebirge“": {
+        "anzahl": 2,
+        "gesamt_ms": 104.5,
+        "groesster_ms": 53.2
+      },
+      "Strich „Erhöhen“": {
+        "anzahl": 1,
+        "gesamt_ms": 85.8,
+        "groesster_ms": 85.8
+      }
+    },
+    "groesste": [
+      {
+        "start_s": 44.35,
+        "dauer_ms": 85.8,
+        "handlung": "Strich „Erhöhen“",
+        "zustand": "Ausschnitt 3,1 km, 5 Bearb.",
+        "beim_malen": true
+      },
+      {
+        "start_s": 5.544,
+        "dauer_ms": 60.4,
+        "handlung": "Regler „Breitengrad“ ziehen",
+        "zustand": "Globus",
+        "beim_malen": false
+      },
+      {
+        "start_s": 23.332,
+        "dauer_ms": 53.2,
+        "handlung": "Strich „Gebirge“",
+        "zustand": "Kontinent 1.600 km, 4 Bearb.",
+        "beim_malen": true
+      },
+      {
+        "start_s": 22.056,
+        "dauer_ms": 51.3,
+        "handlung": "Strich „Gebirge“",
+        "zustand": "Kontinent 1.600 km, 3 Bearb.",
+        "beim_malen": true
+      }
+    ]
+  },
+  "pruefungen": {
+    "Schaltfläche „Neu zeichnen“ gefunden": true,
+    "Schaltfläche „Welt“ gefunden": true,
+    "Breitengrad über den Regler gesetzt (42.0°, Ziel 42°)": true,
+    "Schaltfläche „Kontinent bearbeiten“ gefunden": true,
+    "Werkzeug „Land zeichnen“ gewählt": true,
+    "Umriss ergibt Land": true,
+    "Schaltfläche „Gelände“ gefunden": true,
+    "Schaltfläche „Gebirge“ gefunden": true,
+    "Drei Gebirgsstriche angelegt": true,
+    "Schaltfläche „Ansehen“ gefunden": true,
+    "Kontinent: gemerkter Gipfel im Ausschnitt (Versatz zur Mitte 103 km / 61 km, halbe Größe 800 km)": true,
+    "Kontinent: Gipfel bleibt Höchstpunkt im Umkreis 80 km (höchster Rasterpunkt 1,4 km entfernt, erlaubt 9,4 km; +365 m)": true,
+    "Gipfel im freien Bildbereich vor „Region 200 km“": true,
+    "Maßstab gewechselt: Region 200 km (15 Rasten)": true,
+    "Region 200 km: gemerkter Gipfel im Ausschnitt (Versatz zur Mitte 234 m / 2,1 km, halbe Größe 100 km)": true,
+    "Region 200 km: Gipfel bleibt Höchstpunkt im Umkreis 10 km (höchster Rasterpunkt 325 m entfernt, erlaubt 2,3 km; +167 m)": true,
+    "Gipfel im freien Bildbereich vor „Ausschnitt 25 km“": true,
+    "Maßstab gewechselt: Ausschnitt 25 km (18 Rasten)": true,
+    "Ausschnitt 25 km: gemerkter Gipfel im Ausschnitt (Versatz zur Mitte 39 m / 29 m, halbe Größe 13 km)": true,
+    "Ausschnitt 25 km: Gipfel bleibt Höchstpunkt im Umkreis 1,3 km (höchster Rasterpunkt 49 m entfernt, erlaubt 293 m; +36 m)": true,
+    "Gipfel im freien Bildbereich vor „Detail 3,1 km“": true,
+    "Maßstab gewechselt: Detail 3,1 km (18 Rasten)": true,
+    "Detail 3,1 km: gemerkter Gipfel im Ausschnitt (Versatz zur Mitte 2 m / 5 m, halbe Größe 1,6 km)": true,
+    "Detail 3,1 km: Gipfel bleibt Höchstpunkt im Umkreis 156 m (höchster Rasterpunkt 5 m entfernt, erlaubt 37 m; +7 m)": true,
+    "Stufen erreicht: 200 km, 25 km, 3,1 km": true,
+    "Gipfel im freien Bildbereich vor „Detail näher“": true,
+    "Im Detail geblieben (kein weiterer Maßstab)": true,
+    "Gipfel im freien Bildbereich vor „Bearbeiten“": true,
+    "Schaltfläche „Erhöhen“ gefunden": true,
+    "Erhöhen: Bearbeitung angelegt, Boden höher (6928 → 6953 m)": true,
+    "Schaltfläche „Senken“ gefunden": true,
+    "Senken: Bearbeitung angelegt, Boden tiefer (6951 → 6926 m)": true,
+    "Bearbeitung nahe am Gipfel (163 m vom gemerkten Gipfel)": true,
+    "Rückgängig im Detail, Malstelle im Bild (3,1 km)": true,
+    "Schaltfläche „Rückgängig“ gefunden": true,
+    "Rückgängig nimmt die letzte Bearbeitung zurück (6 → 5 Bearb.)": true,
+    "Rückgängig stellt die Höhe an der Malstelle genau her (vorher 6951.079 m, nach Rückgängig 6951.079 m, Abweichung 0.0000 m)": true,
+    "Schaltfläche „Wiederholen“ gefunden": true,
+    "Wiederholen stellt die Bearbeitung wieder her (6 Bearb.)": true,
+    "Wiederholen stellt die Höhe an der Malstelle genau her (nach Senken 6926.143 m, nach Wiederholen 6926.142 m, Abweichung -0.0003 m)": false,
+    "Zurück auf Kontinentebene": true,
+    "Auf Kontinentebene alle Bearbeitungen da (6)": true,
+    "Gespeichert = geladen": true
+  },
+  "abschnitte": [
+    {
+      "t_s": 0.29,
+      "text": "Neue Welt: leerer Globus"
+    },
+    {
+      "t_s": 1.8,
+      "text": "1 · Neuen Kontinent anlegen"
+    },
+    {
+      "t_s": 3.88,
+      "text": "1 · Zurück zum Globus: Breitengrad mit dem Regler einstellen"
+    },
+    {
+      "t_s": 8.0,
+      "text": "1 · Den Umriss zeichnen"
+    },
+    {
+      "t_s": 16.61,
+      "text": "2 · Gebirge entlang eines Strichs malen"
+    },
+    {
+      "t_s": 25.16,
+      "text": "3 · Höchster Gipfel des größten Massivs (aus den Geländedaten) – mit dem Mausrad hinein"
+    },
+    {
+      "t_s": 42.2,
+      "text": "4 · Am Berg: „Erhöhen“ – eine Schulter aufbauen"
+    },
+    {
+      "t_s": 45.43,
+      "text": "4 · Am Berg: „Senken“ – eine Scharte einschneiden"
+    },
+    {
+      "t_s": 48.37,
+      "text": "5 · Rückgängig im Detail: „Senken“ wird zurückgenommen"
+    },
+    {
+      "t_s": 50.82,
+      "text": "5 · Wiederholen im Detail: „Senken“ ist wieder da"
+    },
+    {
+      "t_s": 54.82,
+      "text": "6 · Mit dem Mausrad hinaus bis zum Kontinent"
+    },
+    {
+      "t_s": 65.53,
+      "text": "Ende"
+    }
+  ],
+  "gipfel": {
+    "x": 102578.125,
+    "y": -61162.109375,
+    "stufen": [
+      {
+        "stufe": "Kontinent",
+        "groesse_m": 1600000.0,
+        "zelle_m": 3125.0,
+        "mitte": [
+          0.0,
+          0.0
+        ],
+        "gipfel_versatz_m": [
+          102578.125,
+          -61162.109375
+        ],
+        "im_ausschnitt": true,
+        "umkreis_m": 80000.0,
+        "hoechster_rasterpunkt": [
+          103125.0,
+          -62500.0
+        ],
+        "abstand_m": 1445.34545898438,
+        "erlaubt_m": 9375.0,
+        "hoehe_gipfel_m": 5825.93541573842,
+        "hoehe_hoechster_m": 6190.49267578125
+      },
+      {
+        "stufe": "Region 200 km",
+        "groesse_m": 200000.0,
+        "zelle_m": 781.25,
+        "mitte": [
+          102343.75,
+          -63281.25
+        ],
+        "gipfel_versatz_m": [
+          234.375,
+          2119.140625
+        ],
+        "im_ausschnitt": true,
+        "umkreis_m": 10000.0,
+        "hoechster_rasterpunkt": [
+          102343.75,
+          -60937.5
+        ],
+        "abstand_m": 324.624420166016,
+        "erlaubt_m": 2343.75,
+        "hoehe_gipfel_m": 6724.94781199169,
+        "hoehe_hoechster_m": 6891.53271484375
+      },
+      {
+        "stufe": "Ausschnitt 25 km",
+        "groesse_m": 25000.0,
+        "zelle_m": 97.65625,
+        "mitte": [
+          102539.0625,
+          -61132.8125
+        ],
+        "gipfel_versatz_m": [
+          39.0625,
+          -29.296875
+        ],
+        "im_ausschnitt": true,
+        "umkreis_m": 1250.0,
+        "hoechster_rasterpunkt": [
+          102539.0625,
+          -61132.8125
+        ],
+        "abstand_m": 48.828125,
+        "erlaubt_m": 292.96875,
+        "hoehe_gipfel_m": 7000.91481369827,
+        "hoehe_hoechster_m": 7036.951171875
+      },
+      {
+        "stufe": "Detail 3,1 km",
+        "groesse_m": 3125.0,
+        "zelle_m": 12.20703125,
+        "mitte": [
+          102575.68359375,
+          -61157.2265625
+        ],
+        "gipfel_versatz_m": [
+          2.44140625,
+          -4.8828125
+        ],
+        "im_ausschnitt": true,
+        "umkreis_m": 156.25,
+        "hoechster_rasterpunkt": [
+          102575.6875,
+          -61157.2265625
+        ],
+        "abstand_m": 5.45740461349487,
+        "erlaubt_m": 36.62109375,
+        "hoehe_gipfel_m": 7066.06178471352,
+        "hoehe_hoechster_m": 7072.72932145745
+      }
+    ],
+    "kamera_verschoben": []
+  },
+  "rueckgaengig_im_detail": {
+    "stelle": [
+      102692.2890625,
+      -61075.19140625
+    ],
+    "ausschnitt_m": 3125.0,
+    "bildstelle": [
+      809.222717285156,
+      473.556427001953
+    ],
+    "hoehe_vorher_m": 6951.07855889574,
+    "hoehe_direkt_nach_senken_m": 6926.14276249335,
+    "hoehe_nach_senken_beruhigt_m": 6926.14276249335,
+    "hoehe_nach_rueckgaengig_m": 6951.07855889574,
+    "hoehe_nach_wiederholen_m": 6926.14249280468
+  }
+}

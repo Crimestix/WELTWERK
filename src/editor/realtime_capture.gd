@@ -11,20 +11,29 @@ extends Node
 ## Pause wirklich dauerte. (Godots --write-movie rechnet jedes Bild in fester Zeit und verdeckt
 ## solche Pausen – deshalb hier nicht verwendet.)
 ##
+## Lücken ab pause_ms (Vorgabe 100 ms, im Ablauf --pause-ab=<ms>) gelten als Rechenpause und werden
+## im Film beschriftet; Lücken von HITCH_MS bis unter pause_ms sind Ruckler – sie werden mit Zeit,
+## Handlung und Zustand gesammelt (Anzahl, Summe, je Handlung, die größten).
+##
 ## Ergebnis in <Ordner>: frames/f_000000.jpg …, frames/zeiten.csv (Bild;Millisekunden) und – über
-## finish() – echtzeit.json mit Bildraten und gemessenen Pausen.
+## finish() – echtzeit.json (bzw. report_name) mit Bildraten, Pausen und Rucklern. Ohne Bilder
+## (max_fps <= 0) bleibt <Ordner>/frames unberührt.
 
-## Ab dieser Lücke zwischen zwei Bildern gilt sie als Rechenpause.
-const PAUSE_MS := 200.0
 ## Ab dieser Lücke als Ruckler gezählt (deutlich länger als ein Bild bei 60 Hz).
 const HITCH_MS := 50.0
 ## Höchstens so viele Bilder warten gleichzeitig aufs Speichern (sonst wird eins ausgelassen).
 const MAX_PENDING := 16
+## So viele der größten Ruckler kommen einzeln in den Bericht.
+const LARGEST_HITCHES := 20
 
 var dir := ""
 var max_fps := 30.0
 var out_size := Vector2i(1280, 800)
 var quality := 0.85
+## Ab dieser Lücke zwischen zwei Bildern gilt sie als Rechenpause.
+var pause_ms := 100.0
+## Dateiname des Berichts in dir.
+var report_name := "echtzeit.json"
 ## Liefert je Bild den Zustand als Dictionary mit mindestens "text" (Maßstab, Bearbeitungen …).
 var state_provider := Callable()
 ## Optional: Ursache einer Pause aus (Zustand davor, Zustand danach, Handlung) → Text.
@@ -39,6 +48,7 @@ var _draws := PackedInt64Array()
 var _captures := PackedFloat64Array()
 var _pending: Array[int] = []
 var _pauses: Array = []
+var _hitches: Array = []
 var _state_before := {}
 var _skipped := 0
 var _running := false
@@ -46,10 +56,12 @@ var _running := false
 
 func start(p_dir: String) -> void:
 	dir = p_dir
-	var frames_dir := dir.path_join("frames")
-	DirAccess.make_dir_recursive_absolute(frames_dir)
-	for f in DirAccess.get_files_at(frames_dir):
-		DirAccess.remove_absolute(frames_dir.path_join(f))
+	DirAccess.make_dir_recursive_absolute(dir)
+	if max_fps > 0.0:
+		var frames_dir := dir.path_join("frames")
+		DirAccess.make_dir_recursive_absolute(frames_dir)
+		for f in DirAccess.get_files_at(frames_dir):
+			DirAccess.remove_absolute(frames_dir.path_join(f))
 	_start_us = Time.get_ticks_usec()
 	_last_draw_us = _start_us
 	_running = true
@@ -71,19 +83,24 @@ func _on_drawn() -> void:
 	var now := Time.get_ticks_usec()
 	var gap_ms := (now - _last_draw_us) / 1000.0
 	var state: Dictionary = state_provider.call() if state_provider.is_valid() else {"text": ""}
-	if gap_ms >= PAUSE_MS and not _draws.is_empty():
+	if not _draws.is_empty() and gap_ms >= HITCH_MS:
 		# Handlung: die zuletzt gesetzte – der Ablauf setzt sie unmittelbar vor dem auslösenden
 		# Ereignis, die Rechnung läuft danach im selben Bild.
-		var pause := {
-			"start_s": snappedf((_last_draw_us - _start_us) / 1000000.0, 0.001),
-			"duration_s": snappedf(gap_ms / 1000.0, 0.001),
-			"handlung": action,
-			"vorher": _state_before.get("text", ""),
-			"nachher": state.get("text", ""),
-		}
-		pause["ursache"] = cause_provider.call(_state_before, state, action) if cause_provider.is_valid() else action
-		_pauses.append(pause)
-		print("Rechenpause %s s bei %s s: %s" % [String.num(pause["duration_s"], 2), String.num(pause["start_s"], 2), pause["ursache"]])
+		var start_s := snappedf((_last_draw_us - _start_us) / 1000000.0, 0.001)
+		if gap_ms >= pause_ms:
+			var pause := {
+				"start_s": start_s,
+				"duration_s": snappedf(gap_ms / 1000.0, 0.001),
+				"handlung": action,
+				"vorher": _state_before.get("text", ""),
+				"nachher": state.get("text", ""),
+			}
+			pause["ursache"] = cause_provider.call(_state_before, state, action) if cause_provider.is_valid() else action
+			_pauses.append(pause)
+			print("Rechenpause %s s bei %s s: %s" % [String.num(pause["duration_s"], 2), String.num(pause["start_s"], 2), pause["ursache"]])
+		else:
+			_hitches.append({"start_s": start_s, "dauer_ms": snappedf(gap_ms, 0.1), "handlung": action,
+				"zustand": state.get("text", ""), "beim_malen": state.get("busy", false) or _state_before.get("busy", false)})
 	_draws.append(now - _start_us)
 	_last_draw_us = now
 	_state_before = state
@@ -120,6 +137,34 @@ func _collect_finished() -> void:
 	_pending = still
 
 
+## Ruckler zusammengefasst: Anzahl, Summe, je Handlung, die größten einzeln (mit Zeit und Handlung).
+func _hitch_report() -> Dictionary:
+	var total := 0.0
+	var by_action := {}
+	var while_painting := 0
+	for h in _hitches:
+		total += h["dauer_ms"]
+		if h["beim_malen"]:
+			while_painting += 1
+		var key: String = h["handlung"]
+		if not by_action.has(key):
+			by_action[key] = {"anzahl": 0, "gesamt_ms": 0.0, "groesster_ms": 0.0}
+		var entry: Dictionary = by_action[key]
+		entry["anzahl"] += 1
+		entry["gesamt_ms"] = snappedf(entry["gesamt_ms"] + h["dauer_ms"], 0.1)
+		entry["groesster_ms"] = maxf(entry["groesster_ms"], h["dauer_ms"])
+	var largest := _hitches.duplicate()
+	largest.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a["dauer_ms"] > b["dauer_ms"])
+	return {
+		"bereich_ms": [HITCH_MS, pause_ms],
+		"anzahl": _hitches.size(),
+		"gesamt_s": snappedf(total / 1000.0, 0.001),
+		"beim_malen": while_painting,
+		"je_handlung": by_action,
+		"groesste": largest.slice(0, LARGEST_HITCHES),
+	}
+
+
 ## Aufnahme beenden: alle Bilder schreiben, Zeitliste und Bericht ablegen. extra wird in den
 ## Bericht übernommen (Prüfungen, Abschnitte des Ablaufs).
 func finish(extra: Dictionary = {}) -> Dictionary:
@@ -129,19 +174,16 @@ func finish(extra: Dictionary = {}) -> Dictionary:
 	for id in _pending:
 		WorkerThreadPool.wait_for_task_completion(id)
 	_pending.clear()
-	var csv := FileAccess.open(dir.path_join("frames/zeiten.csv"), FileAccess.WRITE)
-	csv.store_line("bild;ms")
-	for k in _captures.size():
-		csv.store_line("%d;%.2f" % [k, _captures[k]])
-	csv.close()
+	if max_fps > 0.0:
+		var csv := FileAccess.open(dir.path_join("frames/zeiten.csv"), FileAccess.WRITE)
+		csv.store_line("bild;ms")
+		for k in _captures.size():
+			csv.store_line("%d;%.2f" % [k, _captures[k]])
+		csv.close()
 
 	var gaps := PackedFloat64Array()
-	var hitches := 0
 	for k in range(1, _draws.size()):
-		var g := (_draws[k] - _draws[k - 1]) / 1000.0
-		gaps.append(g)
-		if g >= HITCH_MS and g < PAUSE_MS:
-			hitches += 1
+		gaps.append((_draws[k] - _draws[k - 1]) / 1000.0)
 	var sorted := gaps.duplicate()
 	sorted.sort()
 	var total_pause := 0.0
@@ -150,6 +192,7 @@ func finish(extra: Dictionary = {}) -> Dictionary:
 	var duration := _draws[_draws.size() - 1] / 1000000.0 if not _draws.is_empty() else 0.0
 	var report := {
 		"dauer_s": snappedf(duration, 0.01),
+		"mit_bildern": max_fps > 0.0,
 		"gezeichnete_bilder": _draws.size(),
 		"gespeicherte_bilder": _captures.size(),
 		"ausgelassen_weil_speicher_voll": _skipped,
@@ -162,14 +205,14 @@ func finish(extra: Dictionary = {}) -> Dictionary:
 			"p99": snappedf(_quantile(sorted, 0.99), 0.01),
 			"groesster": snappedf(sorted[sorted.size() - 1] if not sorted.is_empty() else 0.0, 0.01),
 		},
-		"ruckler_50_bis_200_ms": hitches,
-		"pause_ab_ms": PAUSE_MS,
+		"pause_ab_ms": pause_ms,
 		"pausen_anzahl": _pauses.size(),
 		"pausen_gesamt_s": snappedf(total_pause, 0.001),
 		"pausen": _pauses,
+		"ruckler": _hitch_report(),
 	}
 	report.merge(extra)
-	var file := FileAccess.open(dir.path_join("echtzeit.json"), FileAccess.WRITE)
+	var file := FileAccess.open(dir.path_join(report_name), FileAccess.WRITE)
 	file.store_string(JSON.stringify(report, "  ", false))
 	file.close()
 	return report

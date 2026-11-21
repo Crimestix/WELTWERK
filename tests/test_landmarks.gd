@@ -111,3 +111,82 @@ func test_pass_classification() -> void:
 	var coarse := _window(64000.0, 257, func(x: float, y: float) -> float: return _ridge(x + 5000.0, y))
 	var cc := Landmarks.classify(coarse, w, "pass", Vector2.ZERO, scale, axis)
 	check(cc["resolved"] and cc["ok"], "Sattel auf gröberem Raster (%s)" % str(cc))
+
+
+## Pass: Ist nur ein Teil (Kammanstieg) zu klein für das Raster, wird der andere trotzdem geprüft.
+func test_pass_unresolved_part_is_exempt_only_itself() -> void:
+	var w := _window(16000.0, 257, func(x: float, y: float) -> float: return _ridge(x + 5000.0, y))
+	var axis := Landmarks.axes(w, Vector2.ZERO, 300.0)
+	var scale := Landmarks.feature_scale(w, "pass", Vector2.ZERO, axis, 7000.0)
+	# Kammanstieg künstlich klein (nicht aufgelöst), Querabfall groß (aufgelöst).
+	scale["rise_size"] = 100.0
+	scale["fall_size"] = 3000.0
+	# Gleiche Höhe überall: kein Querabfall mehr – muss auffallen, obwohl der Kamm ausgenommen ist.
+	var flat := _window(64000.0, 257, func(_x: float, _y: float) -> float: return 1300.0)
+	var c := Landmarks.classify(flat, w, "pass", Vector2.ZERO, scale, axis)
+	check(c["resolved"] and not c["rise_resolved"] and c["fall_resolved"], "nur der Querabfall aufgelöst (%s)" % str(c))
+	check(c["exempt"] == ["rise"], "Kammanstieg ausgenommen")
+	check(not c["ok"], "fehlender Querabfall fällt auf")
+	# Mit echtem Sattel auf demselben Raster: in Ordnung.
+	var coarse := _window(64000.0, 257, func(x: float, y: float) -> float: return _ridge(x + 5000.0, y))
+	check(Landmarks.classify(coarse, w, "pass", Vector2.ZERO, scale, axis)["ok"], "echter Sattel besteht")
+
+
+func test_correlation() -> void:
+	var a := PackedFloat64Array([1.0, 2.0, 3.0, 4.0])
+	check_near(Landmarks.correlation(a, PackedFloat64Array([10.0, 20.0, 30.0, 40.0])), 1.0, 1e-9, "gleichlaufend")
+	check_near(Landmarks.correlation(a, PackedFloat64Array([4.0, 3.0, 2.0, 1.0])), -1.0, 1e-9, "gegenläufig")
+	check_equal(Landmarks.correlation(a, PackedFloat64Array([5.0, 5.0, 5.0, 5.0])), 0.0, "konstant")
+
+
+## Kammverlauf: auf einem Ost-West-Kamm gehalten, bei ebenem oder um drei Zellen versetztem Kamm nicht.
+func test_course_of_ridge_and_valley() -> void:
+	var cell := 3000.0
+	var line := [Vector2(-20000.0, 0.0), Vector2(0.0, 0.0), Vector2(20000.0, 0.0)]
+	var ridge := func(q: Vector2) -> float: return 1000.0 * exp(-pow(q.y / 6000.0, 2.0))
+	var on := Landmarks.course(ridge, line, cell * 0.5, cell, cell * 2.0, true)
+	var all_kept := true
+	for s in on:
+		all_kept = all_kept and s["kept"]
+	check(on.size() >= 20 and all_kept, "Kamm gehalten (%d Punkte)" % on.size())
+	var flat := Landmarks.course(func(_q: Vector2) -> float: return 500.0, line, cell * 0.5, cell, cell * 2.0, true)
+	var none_kept := true
+	for s in flat:
+		none_kept = none_kept and not s["kept"]
+	check(none_kept, "ebene Fläche ist kein Kamm")
+	var shifted := Landmarks.course(func(q: Vector2) -> float: return 1000.0 * exp(-pow((q.y - 3.0 * cell) / 6000.0, 2.0)),
+		line, cell * 0.5, cell, cell * 2.0, true)
+	none_kept = true
+	for s in shifted:
+		none_kept = none_kept and not s["kept"]
+	check(none_kept, "um drei Zellen versetzter Kamm fällt auf")
+	# Um eine Zelle versetzt: noch innerhalb der Zelle, gehalten.
+	var near := Landmarks.course(func(q: Vector2) -> float: return 1000.0 * exp(-pow((q.y - cell * 0.9) / 6000.0, 2.0)),
+		line, cell * 0.5, cell, cell * 2.0, true)
+	all_kept = true
+	for s in near:
+		all_kept = all_kept and s["kept"]
+	check(all_kept, "knapp eine Zelle versetzter Kamm gilt als gehalten")
+	# Tal: umgekehrt.
+	var trough := Landmarks.course(func(q: Vector2) -> float: return 1000.0 - 600.0 * exp(-pow(q.y / 5000.0, 2.0)),
+		line, cell * 0.5, cell, cell * 2.0, false)
+	all_kept = true
+	for s in trough:
+		all_kept = all_kept and s["kept"]
+	check(all_kept, "Talachse gehalten")
+	var hill := Landmarks.course(ridge, line, cell * 0.5, cell, cell * 2.0, false)
+	none_kept = true
+	for s in hill:
+		none_kept = none_kept and not s["kept"]
+	check(none_kept, "Kamm ist kein Tal")
+
+
+func test_cell_mean_tolerance_and_bias_limit() -> void:
+	var fine := _window(12000.0, 257, func(x: float, y: float) -> float: return 200.0 + _bump(x, y, 0.0, 0.0, 1200.0, 2000.0))
+	var tight := Landmarks.cell_mean_tolerance(fine, Vector2.ZERO, 12.0)
+	var wide := Landmarks.cell_mean_tolerance(fine, Vector2.ZERO, 3000.0)
+	check(tight < 25.0 and wide > tight + 100.0, "Toleranz wächst mit dem Relief einer Zelle (%.0f / %.0f m)" % [tight, wide])
+	check(wide < Landmarks.height_tolerance(fine, Vector2.ZERO, 3000.0), "enger als die frühere Toleranz")
+	check_near(Landmarks.bias_limit(PackedFloat64Array([100.0, 600.0, 300.0])), 70.0, 1e-9, "Versatzgrenze 20 m + 10 % der Spanne")
+	check(Landmarks.fits(fine, Vector2(5000.0, 0.0), 900.0) and not Landmarks.fits(fine, Vector2(5000.0, 0.0), 1100.0),
+		"Scheibe im Ausschnitt")

@@ -7,8 +7,9 @@ extends RefCounted
 ## (ComparisonRun.build_outline/build_features), dann aus den Höhendaten drei markante Stellen
 ## suchen – Gipfel, Pass, Talgrund (Landmarks) – und an festen Kontinentkoordinaten festhalten.
 ## Jede Stelle mit Markierung auf Kontinent-, Regions- (1:8, 1:64) und Detailstufe (1:512) zeigen,
-## Vergleichsbögen zusammensetzen, Höhen und Formen je Stufe messen. Danach dort mit der Maus
-## bearbeiten (Erhöhen, Senken, Glätten), Rückgängig/Wiederholen, Speichern.
+## Vergleichsbögen zusammensetzen, Höhen und Formen je Stufe messen, dazu im Maßstab des
+## Kontinents (120-km-Raster, Verlauf von Hauptkamm und Haupttal). Danach dort mit der Maus
+## bearbeiten (Erhöhen, Senken, Glätten), je Bearbeitung Rückgängig/Wiederholen, Speichern.
 ## Schritt 2 (neuer Prozess, gleiche Datei): Stand, Höhen (bitgleich) und letzte Ansicht prüfen,
 ## Rückgängig/Wiederholen nach dem Neustart, eine weitere Bearbeitung und Rückgängig.
 
@@ -27,6 +28,11 @@ const VIEW_DISTANCE := 560.0
 const REF_SIZE := 24000.0
 ## Prüfraster um jede Stelle: 5 × 5 Punkte im Abstand 1/40 des 25-km-Ausschnitts.
 const GRID_SPACING := 25000.0 / 40.0
+## Prüfraster im Maßstab des Kontinents: 13 × 13 Punkte im Abstand 10 km (120 km).
+const CONTINENT_GRID := 13
+const CONTINENT_SPACING := 10000.0
+## Haupttalachse: ± so weit entlang des Tals (Richtung aus der Talsuche im 200-km-Ausschnitt).
+const VALLEY_HALF := 10000.0
 const BRASS := Color(0.88, 0.70, 0.38)
 const DARK := Color(0.07, 0.055, 0.04, 0.9)
 const PARCHMENT := Color(0.95, 0.9, 0.78)
@@ -38,6 +44,9 @@ var report := {}
 ## Gefundene Stellen: {"key", "name", "kind", "x", "y", "height", "axis", "scale", …}.
 var places: Array = []
 var _refs := {}
+## Linien für den Verlauf auf der Kontinentstufe: "ridge" Gipfel → Joch → Nachbargipfel,
+## "valley" Haupttalachse.
+var _lines := {}
 var _layer: CanvasLayer
 var _marks: Control
 var _caption: Label
@@ -114,6 +123,7 @@ func _step_one(dir: String) -> void:
 			tiles.append(path)
 			windows.append(editor._level_window(level))
 		_measure(p, windows)
+		_continent_scale(p, windows)
 		_sheet([tiles], dir.path_join("vergleich_%s.jpg" % p["key"]), 720)
 		all_tiles.append(tiles)
 	_sheet(all_tiles, dir.path_join("vergleich_alle.jpg"), 560)
@@ -126,9 +136,18 @@ func _step_one(dir: String) -> void:
 	# f) Bearbeiten an den Stellen (Region 25 km), dann Rückgängig/Wiederholen, Speichern.
 	await _edits(dir)
 
-	# Für den Neustart: Höhen frisch berechneter Ausschnitte (gleiche Größe und Auflösung).
-	report["reference"] = _reference_heights()
-	report["places"] = plain
+	# Für den Neustart: Höhen frisch berechneter Ausschnitte (gleiche Größe und Auflösung). Lagen und
+	# Ausschnitte zusätzlich als Bitmuster (Godots JSON-Leser kann die letzte Binärstelle verschieben).
+	var exact := {}
+	var ref_windows := {}
+	for p in places:
+		var rise: Vector2 = p["axis"]["rise"]
+		var fall: Vector2 = p["axis"]["fall"]
+		exact[p["key"]] = _hex([p["x"], p["y"], rise.x, rise.y, fall.x, fall.y])
+		ref_windows[p["key"]] = PackedFloat64Array([p["x"], p["y"], 25000.0, 257.0])
+	report["exact_places"] = exact
+	report["reference"] = _reference_heights(ref_windows)
+	report["places"] = _plain(places)  # nach dem Bearbeiten: mit den Messwerten der Bearbeitungen
 	report["strokes"] = (editor.continent()["strokes"] as Array).size()
 	var view := []
 	for level in editor.levels:
@@ -171,6 +190,7 @@ func _find_places() -> void:
 		chain.append(col)
 		steps["pass"] = chain
 		steps["pass_partner"] = found["partner"]
+		_lines["ridge"] = [peak, col, found["partner"]]
 		_add_place("pass", col, sampler)
 
 	# Talgrund: langes, tief eingeschnittenes Tal im Massiv, mind. 15 km von der Küste.
@@ -180,6 +200,8 @@ func _find_places() -> void:
 		valley = Landmarks.find_valley(cw, cw, coast, 9000.0, 9000.0, 15000.0)
 	if not valley.is_empty():
 		var v: Vector2 = valley["point"]
+		var along: Vector2 = valley["along"]
+		_lines["valley"] = [v - along * VALLEY_HALF, v + along * VALLEY_HALF]
 		chain = [v]
 		# Erst grob den Haupttalgrund suchen (nicht in eine Seitenrinne rutschen), dann verfeinern.
 		for refine in [[25000.0, 4000.0], [6000.0, 600.0], [1500.0, 150.0]]:
@@ -193,6 +215,7 @@ func _find_places() -> void:
 	for key in steps:
 		plain_steps[key] = _plain(steps[key])
 	report["search"] = plain_steps
+	report["lines"] = _plain(_lines)
 	report["massif_center"] = _plain(massif)
 
 
@@ -231,40 +254,62 @@ func _measure(p: Dictionary, windows: Array) -> void:
 		var w: TerrainWindow = windows[level]
 		var entry := {"name": names[level], "cell_m": w.cell, "window": [w.cx, w.cy, w.size, w.res],
 			"height": w.height_at(at.x, at.y)}
-		# Höhenvergleich mit der feinsten Stufe auf dem 5 × 5-Raster.
+		# Höhen auf dem 5 × 5-Raster gegen das über eine Zelle dieser Stufe gemittelte feine Gelände.
 		if level < LEVELS - 1:
 			var diffs := []
+			var old_diffs := []
+			var inside := true
+			var worst_ratio := -INF
 			var worst := 0.0
 			var worst_tol := 0.0
 			var bias := 0.0
-			var inside := true
-			var lowpass := 0.0
+			var means := PackedFloat64Array()
+			var old_worst := 0.0
+			var old_bias := 0.0
+			var old_inside := true
 			for gj in 5:
 				var row := []
+				var old_row := []
 				for gi in 5:
 					var q := at + Vector2((gi - 2) * GRID_SPACING, (2 - gj) * GRID_SPACING)
-					var d := w.height_at(q.x, q.y) - finest.height_at(q.x, q.y)
-					# Toleranz aus dem feinsten Ausschnitt, der den Umkreis ganz enthält.
-					var span := Landmarks.RESOLVE_CELLS * w.cell + GRID_SPACING * 2.0 * sqrt(2.0)
-					var source: TerrainWindow = finest if span < finest.size * 0.5 else ref
-					var tol := Landmarks.height_tolerance(source, q, w.cell)
-					# Zum Vergleich: Abweichung vom über eine Zelle gemittelten feinen Gelände.
-					lowpass = maxf(lowpass, absf(w.height_at(q.x, q.y) - Landmarks.cell_mean(source, q, w.cell)))
+					# Feinster Ausschnitt, der eine ganze Zelle um den Punkt enthält.
+					var source: TerrainWindow = finest if Landmarks.fits(finest, q, w.cell) else ref
+					var mean := Landmarks.cell_mean(source, q, w.cell)
+					var tol := Landmarks.cell_mean_tolerance(source, q, w.cell)
+					var d := w.height_at(q.x, q.y) - mean
+					means.append(mean)
 					row.append(snappedf(d, 0.01))
 					bias += d / 25.0
-					if absf(d) > worst:
-						worst = absf(d)
-					worst_tol = maxf(worst_tol, tol)
 					if absf(d) > tol:
 						inside = false
+					if absf(d) / tol > worst_ratio:
+						worst_ratio = absf(d) / tol
+						worst = absf(d)
+						worst_tol = tol
+					# Zur Information: frühere Messung gegen die Detailstufe mit weiter Toleranz.
+					var od := w.height_at(q.x, q.y) - finest.height_at(q.x, q.y)
+					var old_span := Landmarks.RESOLVE_CELLS * w.cell + GRID_SPACING * 2.0 * sqrt(2.0)
+					var old_source: TerrainWindow = finest if old_span < finest.size * 0.5 else ref
+					old_row.append(snappedf(od, 0.01))
+					old_bias += od / 25.0
+					old_worst = maxf(old_worst, absf(od))
+					old_inside = old_inside and absf(od) <= Landmarks.height_tolerance(old_source, q, w.cell)
 				diffs.append(row)
-			entry["diff_to_detail_m"] = diffs
-			entry["max_abs_diff_m"] = worst
-			entry["mean_diff_m"] = bias
-			entry["max_tolerance_m"] = worst_tol
-			entry["max_abs_diff_to_cell_mean_m"] = lowpass
-			checks["%s · %s ↔ %s: Höhen im Rahmen (größte Abweichung %d m, mittlere %+d m; zum Zellmittel %d m)" % [p["name"],
-				names[level], names[LEVELS - 1], int(round(worst)), int(round(bias)), int(round(lowpass))]] = inside
+				old_diffs.append(old_row)
+			var limit := Landmarks.bias_limit(means)
+			entry["diff_to_cell_mean_m"] = diffs
+			entry["worst_diff_to_cell_mean_m"] = worst
+			entry["worst_tolerance_m"] = worst_tol
+			entry["mean_bias_m"] = bias
+			entry["mean_bias_limit_m"] = limit
+			entry["info_diff_to_detail_m"] = old_diffs
+			entry["info_max_abs_diff_to_detail_m"] = old_worst
+			entry["info_mean_diff_to_detail_m"] = old_bias
+			entry["info_old_tolerance_ok"] = old_inside
+			checks["%s · %s: Höhen = Zellmittel des feinen Geländes (knappste Stelle %d m, erlaubt %d m)" % [p["name"],
+				names[level], int(round(worst)), int(round(worst_tol))]] = inside
+			checks["%s · %s: kein Höhenversatz (Mittel %+d m, erlaubt ±%d m)" % [p["name"], names[level],
+				int(round(bias)), int(round(limit))]] = absf(bias) <= limit
 		var form := Landmarks.classify(w, ref, p["kind"], at, p["scale"], p["axis"])
 		entry["form"] = form
 		var what: String = {"peak": "bleibt Höchstpunkt", "pass": "bleibt Sattel", "valley": "bleibt Tiefstpunkt"}[p["kind"]]
@@ -276,13 +321,98 @@ func _measure(p: Dictionary, windows: Array) -> void:
 				detail = " (dort %s daneben, aber nur %d m Unterschied, erlaubt %d m)" % [EditorUI.meters(form["offset_m"]),
 					int(round(absf(form["extreme_height"] - form["height"]))), int(round(form["tolerance_m"]))]
 			else:
-				detail = " (Kamm %+d m, quer %+d m)" % [int(round(form["rise_kept"])), int(round(-form["fall_kept"]))]
+				var parts := []
+				for part in ["rise", "fall"]:
+					var name: String = "Kamm" if part == "rise" else "quer"
+					var value: float = form[part + "_kept"] if part == "rise" else -form[part + "_kept"]
+					if form[part + "_resolved"]:
+						parts.append("%s %+d m" % [name, int(round(value))])
+					else:
+						parts.append("%s zu klein für das Raster, ausgenommen" % name)
+				detail = " (%s)" % "; ".join(PackedStringArray(parts))
 			checks["%s · %s: %s%s" % [p["name"], names[level], what, detail]] = form["ok"]
 		else:
 			checks["%s · %s: zu klein für das Raster (%s), darf geglättet sein" % [p["name"], names[level],
 				EditorUI.meters(w.cell)]] = true
 		per_level.append(entry)
 	p["levels"] = per_level
+
+
+## e) Im Maßstab des Kontinents selbst: 13 × 13-Raster über 120 km um die Stelle, Kontinentstufe
+## gegen den 200-km-Ausschnitt, auf Kontinentzellen gemittelt. Dazu der Verlauf von Hauptkamm
+## (beim Pass) bzw. Haupttalachse (beim Tal).
+func _continent_scale(p: Dictionary, windows: Array) -> void:
+	var cont: TerrainWindow = windows[0]
+	var region: TerrainWindow = windows[1]
+	var names := _level_names()
+	var c := cont.cell
+	var at := Vector2(p["x"], p["y"])
+	var coarse := PackedFloat64Array()
+	var means := PackedFloat64Array()
+	var bias := 0.0
+	var half := (CONTINENT_GRID - 1) / 2
+	for gj in CONTINENT_GRID:
+		for gi in CONTINENT_GRID:
+			var q := at + Vector2(gi - half, half - gj) * CONTINENT_SPACING
+			if not Landmarks.fits(region, q, c * 0.5):
+				continue
+			var mean := Landmarks.cell_mean(region, q, c)
+			coarse.append(cont.height_at(q.x, q.y))
+			means.append(mean)
+			bias += cont.height_at(q.x, q.y) - mean
+	var count := coarse.size()
+	bias = bias / count if count > 0 else 0.0
+	var r := Landmarks.correlation(coarse, means)
+	var limit := Landmarks.bias_limit(means)
+	var full := count == CONTINENT_GRID * CONTINENT_GRID
+	var span := "%d km, %d × %d" % [int(CONTINENT_SPACING * (CONTINENT_GRID - 1) / 1000.0), CONTINENT_GRID, CONTINENT_GRID]
+	checks["%s · %s ↔ %s (%s): gleicher Verlauf (Korrelation %s, mindestens 0,9%s)" % [p["name"], names[0], names[1], span,
+		String.num(r, 3), "" if full else "; nur %d Punkte im Ausschnitt" % count]] = full and r >= 0.9
+	checks["%s · %s ↔ %s (%s): kein Höhenversatz (Mittel %+d m, erlaubt ±%d m)" % [p["name"], names[0], names[1], span,
+		int(round(bias)), int(round(limit))]] = full and absf(bias) <= limit
+	var info := {"grid_points": count, "spacing_m": CONTINENT_SPACING, "correlation": r, "mean_bias_m": bias,
+		"mean_bias_limit_m": limit}
+	var line: Array = []
+	var ridge := true
+	var what := ""
+	if p["kind"] == "pass" and _lines.has("ridge"):
+		line = _lines["ridge"]
+		what = "Hauptkamm Gipfel – Joch – Nachbargipfel bleibt Kamm"
+	elif p["kind"] == "valley" and _lines.has("valley"):
+		line = _lines["valley"]
+		ridge = false
+		what = "Haupttalachse (%s) bleibt Talgrund" % EditorUI.meters(VALLEY_HALF * 2.0)
+	if not line.is_empty():
+		# Linie innerhalb einer Zelle, Seiten im Abstand von zwei Zellen.
+		var at_coarse := Landmarks.course(func(q: Vector2) -> float: return cont.height_at(q.x, q.y),
+			line, c * 0.5, c, c * 2.0, ridge)
+		var at_region := Landmarks.course(func(q: Vector2) -> float: return Landmarks.cell_mean(region, q, c),
+			line, c * 0.5, c, c * 2.0, ridge)
+		var valid := 0
+		var shown := 0
+		var kept := 0
+		var kept_all := 0
+		var missing := []
+		for k in at_coarse.size():
+			var q: Vector2 = at_coarse[k]["point"]
+			if not Landmarks.fits(region, q, c * 2.5):
+				continue
+			valid += 1
+			if at_coarse[k]["kept"]:
+				kept_all += 1
+			if not at_region[k]["kept"]:
+				continue
+			shown += 1
+			if at_coarse[k]["kept"]:
+				kept += 1
+			else:
+				missing.append(_plain(q))
+		var need := int(ceil(0.9 * shown))
+		info["course"] = {"samples": at_coarse.size(), "inside_region": valid, "region_shows": shown, "continent_keeps": kept,
+			"continent_keeps_anywhere": kept_all, "missing": missing, "line": _plain(line)}
+		checks["%s · %s: %s (%d von %d Punkten, mind. %d; im 200-km-Ausschnitt gemittelt erkennbar an %d von %d)" % [
+			p["name"], names[0], what, kept, shown, need, shown, valid]] = valid >= 5 and shown * 2 >= valid and kept >= need
+	p["continent_scale"] = info
 
 
 # --- Ansichten -------------------------------------------------------------------------------
@@ -323,67 +453,46 @@ func _look_at(p: Dictionary) -> void:
 # --- Bearbeiten ------------------------------------------------------------------------------
 
 func _edits(dir: String) -> void:
-	var sampler: TerrainSampler = editor.sampler_for(editor.active_id)
 	var peak: Variant = _place("gipfel")
 	await _goto(peak if peak != null else places[0], 0)
 	_look_at(peak if peak != null else places[0])
 	_caption.text = "Kontinent · vor dem Bearbeiten"
 	await editor._frames(25)
 	await editor._shot(dir.path_join("bearbeitung_kontinent_vorher.jpg"))
+	# Glätten mit großem, vollem Pinsel entlang des Kamms – eine echte, messbare Bearbeitung.
 	var plan := [
 		["gipfel", "raise", 0.06, 0.8, "Gipfel erhöht"],
 		["tal", "lower", 0.05, 0.7, "Tal vertieft"],
-		["pass", "smooth", 0.06, 0.9, "Pass geglättet"],
+		["pass", "smooth", 0.08, 1.0, "Pass geglättet"],
 	]
-	var last := {}
 	for item in plan:
 		var p: Variant = _place(item[0])
 		if p == null:
 			continue
-		last = await _edit(dir, p, item[1], item[2], item[3], item[4], sampler)
+		await _edit(dir, p, item[1], item[2], item[3], item[4])
 	await _goto(peak if peak != null else places[0], 0)
 	_look_at(peak if peak != null else places[0])
 	_caption.text = "Kontinent · nach dem Bearbeiten"
 	await editor._frames(25)
 	await editor._shot(dir.path_join("bearbeitung_kontinent_nachher.jpg"))
-	if last.is_empty():
-		return
-	# Letzte Bearbeitung rückgängig: dort, wo sie gemacht wurde.
-	var p: Dictionary = last["place"]
-	await _goto(p, EDIT_LEVEL)
-	_look_at(p)
-	await editor._frames(5)
-	var count: int = (editor.continent()["strokes"] as Array).size()
-	var after_heights: PackedFloat32Array = editor.landscape.window.height.duplicate()
-	var t := Time.get_ticks_usec()
-	editor._undo()
-	timing["Rückgängig (Ausschnitt neu berechnen)"] = (Time.get_ticks_usec() - t) / 1000.0
-	await editor._frames(5)
-	checks["Rückgängig: eine Bearbeitung weniger"] = (editor.continent()["strokes"] as Array).size() == count - 1
-	checks["Rückgängig: angezeigter Ausschnitt bitgleich wie vor „%s“" % last["label"]] = \
-		editor.landscape.window.height == (last["fresh_before"] as TerrainWindow).height
-	var continent_undone := _continent_window(sampler)
-	checks["Rückgängig: Kontinentstufe bitgleich wie vorher"] = continent_undone.height == (last["continent_before"] as TerrainWindow).height
-	_caption.text = "%s · Rückgängig" % p["name"]
-	await editor._frames(20)
-	await editor._shot(dir.path_join("bearbeitung_%s_rueckgaengig.jpg" % p["key"]))
-	t = Time.get_ticks_usec()
-	editor._redo()
-	timing["Wiederholen (Ausschnitt neu berechnen)"] = (Time.get_ticks_usec() - t) / 1000.0
-	await editor._frames(5)
-	var redone: PackedFloat32Array = editor.landscape.window.height
-	var worst := _max_diff(redone, after_heights)
-	report["redo_max_diff_to_live_painting_m"] = worst
-	checks["Wiederholen: Bearbeitung wieder da, gleiche Höhen wie beim Malen (Abweichung %s m)" % String.num(worst, 4)] = \
-		(editor.continent()["strokes"] as Array).size() == count and worst < 0.01
 	editor._save_now()
 	var reloaded := WorldDocument.load_file(editor.save_path)
 	checks["Gespeichert = geladen"] = reloaded != null and editor.same_data(editor.doc.to_dict(), reloaded.to_dict())
 
 
-## Eine Bearbeitung mit echten Mausereignissen an der Stelle (Region 25 km), mit Messung.
-func _edit(dir: String, p: Dictionary, tool: String, fraction: float, strength: float, label: String,
-		sampler: TerrainSampler) -> Dictionary:
+## Eigener, frischer Sampler ohne zwischengespeicherte Grundform – unabhängig vom Editor.
+func _fresh_sampler() -> TerrainSampler:
+	TerrainSampler.clear_base_cache()
+	return TerrainSampler.new(editor.continent(), editor.doc.planet)
+
+
+func _stroke_count() -> int:
+	return (editor.continent()["strokes"] as Array).size()
+
+
+## Eine Bearbeitung mit echten Mausereignissen an der Stelle (Region 25 km), mit Messung, dann
+## Rückgängig und Wiederholen an derselben Stelle.
+func _edit(dir: String, p: Dictionary, tool: String, fraction: float, strength: float, label: String) -> void:
 	await _goto(p, EDIT_LEVEL)
 	_look_at(p)
 	_caption.text = "%s · %s · vorher" % [p["name"], _level_names()[EDIT_LEVEL]]
@@ -392,11 +501,12 @@ func _edit(dir: String, p: Dictionary, tool: String, fraction: float, strength: 
 	await editor._shot(dir.path_join("bearbeitung_%s_vorher.jpg" % p["key"]))
 	var at := Vector2(p["x"], p["y"])
 	var level: Dictionary = editor.levels.back()
-	var fresh_before := sampler.window(level["cx"], level["cy"], level["size"], 257)
+	# Frisch berechnet: Zwischenspeicher der Grundform geleert, eigener Sampler.
+	var fresh_before := _fresh_sampler().window(level["cx"], level["cy"], level["size"], 257)
 	checks["%s: angezeigter Ausschnitt = frisch berechnet (bitgleich)" % p["name"]] = \
 		editor.landscape.window.height == fresh_before.height
-	var continent_before := _continent_window(sampler)
-	var count: int = (editor.continent()["strokes"] as Array).size()
+	var continent_before := _continent_window(_fresh_sampler())
+	var count := _stroke_count()
 	# Strich: Gipfel quer darüber, Tal entlang der Talsohle, Pass entlang des Kamms.
 	var dir_vec := Vector2.RIGHT
 	var half := 400.0
@@ -405,7 +515,7 @@ func _edit(dir: String, p: Dictionary, tool: String, fraction: float, strength: 
 		half = 1500.0
 	elif p["kind"] == "pass":
 		dir_vec = p["axis"]["rise"]
-		half = 700.0
+		half = 1500.0
 	editor._use_tool(tool)
 	editor.ui.set_brush(fraction, strength)
 	var radius: float = editor.landscape.brush_radius_m
@@ -414,13 +524,16 @@ func _edit(dir: String, p: Dictionary, tool: String, fraction: float, strength: 
 	timing["%s (Malen mit der Maus)" % label] = (Time.get_ticks_usec() - t) / 1000.0
 	editor._use_tool("navigate")
 	await editor._frames(10)
-	checks["%s: eine neue Bearbeitung" % label] = (editor.continent()["strokes"] as Array).size() == count + 1
+	# Live bemalter Ausschnitt, direkt nach dem Strich (noch nicht neu berechnet).
 	var shown: TerrainWindow = editor.landscape.window
+	var live: PackedFloat32Array = shown.height.duplicate()
+	var live_window := [shown.cx, shown.cy, shown.size, shown.res]
+	checks["%s: eine neue Bearbeitung" % label] = _stroke_count() == count + 1
 	var delta := shown.height_at(at.x, at.y) - fresh_before.height_at(at.x, at.y)
 	var entry := {"tool": tool, "radius_m": radius, "shown_delta_m": delta}
 	match p["kind"]:
 		"peak":
-			checks["%s: Darstellung dort höher (%+d m)" % [label, int(round(delta))]] = delta > 50.0
+			checks["%s: Darstellung dort deutlich höher (%+d m, mind. +100 m)" % [label, int(round(delta))]] = delta > 100.0
 		"valley":
 			checks["%s: Darstellung dort tiefer (%+d m)" % [label, int(round(delta))]] = delta < -30.0
 		_:
@@ -433,14 +546,19 @@ func _edit(dir: String, p: Dictionary, tool: String, fraction: float, strength: 
 				moved = maxf(moved, absf(shown.height_at(q.x, q.y) - fresh_before.height_at(q.x, q.y)))
 			entry["roughness_before_m"] = rough_before
 			entry["roughness_after_m"] = rough_after
+			# Zur Information: Rauheit gröberer Wellenlängen (Nachbarn im Abstand 8 bzw. 16 Zellen).
+			for cells in [8.0, 16.0]:
+				entry["info_roughness_%d_cells_m" % int(cells)] = [_roughness(fresh_before, at, radius * 0.5, cells),
+					_roughness(shown, at, radius * 0.5, cells)]
 			entry["max_change_m"] = moved
-			checks["%s: Darstellung dort verändert (bis %s m)" % [label, String.num(moved, 1)]] = moved > 0.5
-			checks["%s: Stelle wird ruhiger (Rauheit %s → %s m)" % [label, String.num(rough_before, 2),
-				String.num(rough_after, 2)]] = rough_after < rough_before
+			var share := rough_after / rough_before - 1.0 if rough_before > 0.0 else 0.0
+			checks["%s: Darstellung dort verändert (bis %s m, mind. 20 m)" % [label, String.num(moved, 1)]] = moved > 20.0
+			checks["%s: Stelle wird ruhiger (Rauheit %s → %s m, %+d %%, mind. −15 %%)" % [label, String.num(rough_before, 2),
+				String.num(rough_after, 2), int(round(share * 100.0))]] = share <= -0.15
 	# Vereinfacht auf der Kontinentstufe (frisch berechnet wie beim Herauszoomen).
 	t = Time.get_ticks_usec()
-	var continent_after := _continent_window(sampler)
-	timing["Kontinentstufe neu berechnen (%s)" % label] = (Time.get_ticks_usec() - t) / 1000.0
+	var continent_after := _continent_window(_fresh_sampler())
+	timing["Kontinentstufe frisch berechnen (%s)" % label] = (Time.get_ticks_usec() - t) / 1000.0
 	var reach := radius + continent_after.cell
 	var lo := INF
 	var hi := -INF
@@ -464,22 +582,51 @@ func _edit(dir: String, p: Dictionary, tool: String, fraction: float, strength: 
 			var rb := relief_before.y - relief_before.x
 			var ra := relief_after.y - relief_after.x
 			checks["%s: Kontinentstufe nicht unruhiger (Spannweite %d → %d m)" % [label, int(rb), int(ra)]] = ra <= rb * 1.01 + 10.0  # Rundung der Zellmittel; geglättet wird nur im feinen Anteil
-	p["edit"] = entry
 	_caption.text = "%s · %s · nachher (%s)" % [p["name"], _level_names()[EDIT_LEVEL], label]
 	await editor._frames(20)
 	await editor._shot(dir.path_join("bearbeitung_%s_nachher.jpg" % p["key"]))
 	_sheet([[dir.path_join("bearbeitung_%s_vorher.jpg" % p["key"]), dir.path_join("bearbeitung_%s_nachher.jpg" % p["key"])]],
 		dir.path_join("bearbeitung_%s.jpg" % p["key"]), 900)
-	return {"place": p, "label": label, "fresh_before": fresh_before, "continent_before": continent_before}
+
+	# Rückgängig: angezeigter Ausschnitt und Kontinentstufe bitgleich wie vor der Bearbeitung.
+	t = Time.get_ticks_usec()
+	editor._undo()
+	timing["Rückgängig (%s)" % label] = (Time.get_ticks_usec() - t) / 1000.0
+	await editor._frames(5)
+	var w: TerrainWindow = editor.landscape.window
+	checks["%s · Rückgängig: eine Bearbeitung weniger" % label] = _stroke_count() == count
+	checks["%s · Rückgängig: angezeigter Ausschnitt bitgleich wie vorher" % label] = w.height == fresh_before.height
+	var undo_continent: TerrainWindow = editor._level_window(0)
+	checks["%s · Rückgängig: Kontinentstufe bitgleich wie vorher" % label] = undo_continent.height == continent_before.height
+	entry["undo_max_diff_m"] = _max_diff(w.height, fresh_before.height)
+	entry["undo_continent_max_diff_m"] = _max_diff(undo_continent.height, continent_before.height)
+	_caption.text = "%s · Rückgängig (%s)" % [p["name"], label]
+	await editor._frames(20)
+	await editor._shot(dir.path_join("bearbeitung_%s_rueckgaengig.jpg" % p["key"]))
+	# Wiederholen: gleicher Ausschnitt wie beim Malen, Höhen wie live gemalt; Kontinentstufe wie danach.
+	t = Time.get_ticks_usec()
+	editor._redo()
+	timing["Wiederholen (%s)" % label] = (Time.get_ticks_usec() - t) / 1000.0
+	await editor._frames(5)
+	w = editor.landscape.window
+	var same_window: bool = [w.cx, w.cy, w.size, w.res] == live_window
+	var worst := _max_diff(w.height, live)
+	entry["redo_max_diff_to_live_painting_m"] = worst
+	checks["%s · Wiederholen: Bearbeitung wieder da, gleicher Ausschnitt, Höhen wie live gemalt (Abweichung %s m)" % [label,
+		String.num(worst, 4)]] = _stroke_count() == count + 1 and same_window and worst < 0.01
+	var redo_continent: TerrainWindow = editor._level_window(0)
+	entry["redo_continent_max_diff_m"] = _max_diff(redo_continent.height, continent_after.height)
+	checks["%s · Wiederholen: Kontinentstufe bitgleich wie nach dem Malen" % label] = redo_continent.height == continent_after.height
+	p["edit"] = entry
 
 
 func _continent_window(sampler: TerrainSampler) -> TerrainWindow:
 	return sampler.window(0.0, 0.0, editor.continent()["size_km"] * 1000.0, editor.CONTINENT_RES)
 
 
-## Mittlere Abweichung vom Mittel der vier Nachbarn (Abstand zwei Rasterzellen) in einer Scheibe.
-static func _roughness(w: TerrainWindow, c: Vector2, r: float) -> float:
-	var d := w.cell * 2.0
+## Mittlere Abweichung vom Mittel der vier Nachbarn (Abstand cells Rasterzellen) in einer Scheibe.
+static func _roughness(w: TerrainWindow, c: Vector2, r: float, cells: float = 2.0) -> float:
+	var d := w.cell * cells
 	var sum := 0.0
 	for k in 80:
 		var q := c + Vector2(cos(k * Landmarks.GOLDEN), sin(k * Landmarks.GOLDEN)) * r * sqrt((k + 0.5) / 80.0)
@@ -499,24 +646,38 @@ static func _max_diff(a: PackedFloat32Array, b: PackedFloat32Array) -> float:
 
 # --- Neustart --------------------------------------------------------------------------------
 
-## Frisch berechnete Ausschnitte (eigener Sampler) an jeder Stelle: Prüfsumme und Höhen.
-func _reference_heights() -> Dictionary:
-	var sampler := TerrainSampler.new(editor.continent(), editor.doc.planet)
+## Frisch berechnete Ausschnitte (eigener Sampler, Grundform nicht aus dem Zwischenspeicher) je
+## Stelle: Prüfsumme und Höhen. windows: Schlüssel → PackedFloat64Array [cx, cy, Größe, Auflösung].
+func _reference_heights(windows: Dictionary) -> Dictionary:
+	var sampler := _fresh_sampler()
 	var out := {}
-	for p in places:
-		var w := sampler.window(p["x"], p["y"], 25000.0, 257)
+	for key in windows:
+		var spec: PackedFloat64Array = windows[key]
+		var cx := spec[0]
+		var cy := spec[1]
+		var w := sampler.window(cx, cy, spec[2], int(spec[3]))
 		var grid := []
 		for gj in 5:
 			for gi in 5:
-				grid.append(w.height_at(p["x"] + (gi - 2) * GRID_SPACING, p["y"] + (2 - gj) * GRID_SPACING))
+				grid.append(w.height_at(cx + (gi - 2) * GRID_SPACING, cy + (2 - gj) * GRID_SPACING))
 		# Genaue Werte als Bitmuster (Godots JSON-Leser kann die letzte Binärstelle verschieben).
-		var exact := PackedFloat64Array([w.height_at(p["x"], p["y"])])
+		var exact := PackedFloat64Array([w.height_at(cx, cy)])
 		exact.append_array(PackedFloat64Array(grid))
-		out[p["key"]] = {"window": [p["x"], p["y"], 25000.0, 257], "md5": _md5(w.height),
-			"height": w.height_at(p["x"], p["y"]), "grid": grid, "exact": exact.to_byte_array().hex_encode()}
+		out[key] = {"window": [cx, cy, spec[2], int(spec[3])], "window_exact": spec.to_byte_array().hex_encode(),
+			"md5": _md5(w.height), "height": w.height_at(cx, cy), "grid": grid, "exact": exact.to_byte_array().hex_encode()}
 	var cw := _continent_window(sampler)
 	out["kontinent"] = {"md5": _md5(cw.height)}
 	return out
+
+
+static func _hex(values: Array) -> String:
+	return PackedFloat64Array(values).to_byte_array().hex_encode()
+
+
+static func _unhex(text: String) -> PackedFloat64Array:
+	if text == "" or text.length() % 16 != 0:
+		return PackedFloat64Array()
+	return text.hex_decode().to_float64_array()
 
 
 static func _md5(values: PackedFloat32Array) -> String:
@@ -532,11 +693,23 @@ func _step_two(dir: String) -> void:
 	checks["Ergebnis von Schritt 1 gelesen"] = before is Dictionary
 	if not before is Dictionary:
 		return
+	# Lagen und Achsen aus den Bitmustern (genau wie in Schritt 1, ohne Umweg über JSON-Zahlen).
+	var exact_places: Dictionary = before.get("exact_places", {})
+	var decoded := 0
 	for plain in before.get("places", []):
 		var p: Dictionary = (plain as Dictionary).duplicate(true)
-		var axis: Dictionary = p["axis"]
-		p["axis"] = {"rise": Vector2(axis["rise"][0], axis["rise"][1]), "fall": Vector2(axis["fall"][0], axis["fall"][1])}
+		var bits := _unhex(exact_places.get(p["key"], ""))
+		if bits.size() == 6:
+			decoded += 1
+			p["x"] = bits[0]
+			p["y"] = bits[1]
+			p["axis"] = {"rise": Vector2(bits[2], bits[3]), "fall": Vector2(bits[4], bits[5])}
+		else:
+			var axis: Dictionary = p["axis"]
+			p["axis"] = {"rise": Vector2(axis["rise"][0], axis["rise"][1]), "fall": Vector2(axis["fall"][0], axis["fall"][1])}
 		places.append(p)
+	checks["Neustart: Lagen als Bitmuster gelesen (%d von %d Stellen)" % [decoded, places.size()]] = \
+		decoded == places.size() and decoded > 0
 	checks["Neustart: Kontinent da"] = editor.doc.continents.size() == 1 and editor.active_id == before.get("continent_id", "")
 	checks["Neustart: gleiche Zahl Bearbeitungen (%d)" % int(before.get("strokes", -1))] = \
 		(editor.continent()["strokes"] as Array).size() == int(before.get("strokes", -1))
@@ -548,8 +721,14 @@ func _step_two(dir: String) -> void:
 			same_view = same_view and absf(level["cx"] - view[k][0]) < 0.01 and absf(level["cy"] - view[k][1]) < 0.01 \
 				and absf(level["size"] - view[k][2]) < 0.01
 	checks["Neustart: letzte Ansicht wiederhergestellt (%d Stufen)" % view.size()] = same_view
-	var now := _reference_heights()
 	var stored: Dictionary = before.get("reference", {})
+	var ref_windows := {}
+	for p in places:
+		var spec := _unhex(stored.get(p["key"], {}).get("window_exact", ""))
+		ref_windows[p["key"]] = spec if spec.size() == 4 else PackedFloat64Array([p["x"], p["y"], 25000.0, 257.0])
+		var same_spot: bool = spec.size() == 4 and spec[0] == p["x"] and spec[1] == p["y"]
+		checks["Neustart: %s – Ausschnitt aus Bitmuster, Mitte = Stelle (bitgleich)" % p["name"]] = same_spot
+	var now := _reference_heights(ref_windows)
 	for p in places:
 		var a: Dictionary = now[p["key"]]
 		var b: Dictionary = stored.get(p["key"], {})
@@ -568,10 +747,10 @@ func _step_two(dir: String) -> void:
 	await _goto(p, EDIT_LEVEL)
 	_look_at(p)
 	await editor._frames(10)
-	var sampler: TerrainSampler = editor.sampler_for(editor.active_id)
 	var level: Dictionary = editor.levels.back()
 	var at := Vector2(p["x"], p["y"])
-	var start: PackedFloat32Array = sampler.window(level["cx"], level["cy"], level["size"], 257).height
+	var start: PackedFloat32Array = _fresh_sampler().window(level["cx"], level["cy"], level["size"], 257).height
+	checks["Nach Neustart: angezeigter Ausschnitt = frisch berechnet (bitgleich)"] = editor.landscape.window.height == start
 	var count: int = (editor.continent()["strokes"] as Array).size()
 	editor._use_tool("raise")
 	editor.ui.set_brush(0.05, 0.6)
@@ -595,7 +774,7 @@ func _step_two(dir: String) -> void:
 	checks["Nach Neustart: Wiederholen stellt die Bearbeitung her (Abweichung %s m)" % String.num(worst, 4)] = \
 		(editor.continent()["strokes"] as Array).size() == count + 1 and worst < 0.01
 	# Eine weitere Bearbeitung (Senken am Pass) und Rückgängig.
-	var redone: PackedFloat32Array = sampler.window(level["cx"], level["cy"], level["size"], 257).height
+	var redone: PackedFloat32Array = _fresh_sampler().window(level["cx"], level["cy"], level["size"], 257).height
 	editor._use_tool("lower")
 	editor.ui.set_brush(0.04, 0.5)
 	await editor._mouse_stroke([at - p["axis"]["rise"] * 300.0, at + p["axis"]["rise"] * 300.0])
@@ -726,12 +905,15 @@ func _sheet(rows: Array, out_path: String, tile_width: int) -> void:
 
 func _rules() -> Dictionary:
 	return {
-		"grid": "5 × 5 Punkte im Abstand %s um jede Stelle; Höhen jeder Stufe gegen die Detailstufe" % EditorUI.meters(GRID_SPACING),
-		"height_tolerance": "20 m + halbe Spannweite des feinen Geländes innerhalb von 1,5 Rasterzellen der Stufe",
-		"resolution": "Form gilt als aufgelöst, wenn ihre Größe (Radius) mindestens 1,5 Zellen beträgt; kleinere dürfen geglättet sein",
+		"grid": "5 × 5 Punkte im Abstand %s um jede Stelle; Höhen jeder Stufe gegen das über eine Zelle dieser Stufe gemittelte feine Gelände" % EditorUI.meters(GRID_SPACING),
+		"height_tolerance": "je Punkt 20 m + 15 % der Spannweite des feinen Geländes innerhalb einer Zelle der Stufe; mittlerer Versatz über das Raster höchstens 20 m + 10 % der Höhenspanne des Rasters",
+		"height_info": "nur zur Information: Abweichung gegen die Detailstufe und die frühere Toleranz (20 m + halbe Spannweite innerhalb von 1,5 Zellen)",
+		"continent_grid": "%d × %d Punkte im Abstand %s (120 km) um jede Stelle: Kontinentstufe gegen den 200-km-Ausschnitt, auf Kontinentzellen gemittelt; Korrelation mindestens 0,9, mittlerer Versatz höchstens 20 m + 10 %% der Höhenspanne" % [CONTINENT_GRID, CONTINENT_GRID, EditorUI.meters(CONTINENT_SPACING)],
+		"continent_course": "Hauptkamm Gipfel – Joch – Nachbargipfel bzw. Haupttalachse (± %s): Punkte im Abstand einer halben Kontinentzelle; höchster bzw. tiefster Wert innerhalb einer Zelle quer zur Linie über bzw. unter beiden Seiten im Abstand von zwei Zellen; gezählt werden Punkte, an denen der gemittelte 200-km-Ausschnitt den Verlauf zeigt (mind. die Hälfte), davon mind. 90 %% auf der Kontinentstufe" % EditorUI.meters(VALLEY_HALF),
+		"resolution": "Form(teil) gilt als aufgelöst, wenn seine Größe (Radius) mindestens 1,5 Zellen beträgt; kleinere Teile dürfen geglättet sein, aufgelöste Teile werden geprüft",
 		"form": "aufgelöst: mindestens 30 % des Reliefs (gemessen im selben Abstand im Vergleichsausschnitt) erhalten; Gipfel/Talgrund dieser Stufe höchstens eine Rasterzelle (mind. ¼ Formgröße) neben der Stelle oder kaum höher/tiefer (20 m + 10 % des Reliefs); Pass steigt entlang des Kamms und fällt quer dazu",
 		"feature_size": "Halbrelief-Radius: Gipfel Kreismittel, Tal quer zum Tal, Pass Kammanstieg und Querabfall – kleinster Abstand mit halbem Höchstwert (bis 10,8 km)",
-		"cell_mean": "nur zur Information: Abweichung der Stufe vom über eine Zelle gemittelten feinen Gelände",
+		"edits": "Erhöhen mind. +100 m; Glätten: Rauheit mind. −15 %, Änderung mind. 20 m; je Bearbeitung Rückgängig (Ausschnitt und Kontinentstufe bitgleich wie vorher) und Wiederholen (Ausschnitt wie live gemalt, Kontinentstufe bitgleich wie danach)",
 	}
 
 

@@ -424,19 +424,24 @@ static func feature_scale(w: TerrainWindow, kind: String, p: Vector2, axis: Dict
 
 
 ## Ist die Form auf einer Stufe (Ausschnitt w) noch dieselbe? Verglichen wird im Abstand
-## r = min(Formgröße, 0,45 × Ausschnitt) mit dem feinen Vergleichsausschnitt ref. Formen unter
-## RESOLVE_CELLS Zellen gelten als nicht aufgelöst (dürfen geglättet sein). Sonst gilt:
+## r = min(Formgröße, 0,45 × Ausschnitt) mit dem feinen Vergleichsausschnitt ref. Jeder Teil der
+## Form (Gipfel/Tal: die Form; Pass: Kammanstieg und Querabfall getrennt) unter RESOLVE_CELLS
+## Zellen gilt als nicht aufgelöst und ist ausgenommen (darf geglättet sein). Für jeden
+## aufgelösten Teil gilt:
 ## – Relief: mindestens KEEP_SHARE des Reliefs von ref im selben Abstand bleibt erhalten (ist es
 ##   dort schwach oder negativ, etwa bei gekrümmtem Kamm: höchstens 20 m + 10 % darunter);
 ## – Lage: Gipfel bzw. Talgrund (quer zum Tal) dieser Stufe liegt höchstens eine Rasterzelle
 ##   (mindestens ¼ der Formgröße) neben der Stelle – oder ist kaum höher bzw. tiefer (Toleranz);
 ## – Pass: entlang des Kamms steigt es, quer dazu fällt es (beides nach der Reliefregel).
+## Ergebnis u. a. "resolved" (mindestens ein Teil aufgelöst), "ok" (alle aufgelösten Teile
+## stimmen), "exempt" (Namen der ausgenommenen Teile), je Teil "<teil>_resolved"/"<teil>_ok".
 static func classify(w: TerrainWindow, ref: TerrainWindow, kind: String, p: Vector2, scale: Dictionary, axis: Dictionary) -> Dictionary:
 	var limit := w.size * 0.45
 	var h := w.height_at(p.x, p.y)
 	var out := {"cell": w.cell, "height": h}
-	var resolved := true
+	var any_resolved := false
 	var ok := true
+	var exempt := []
 	var parts := ["rise", "fall"] if kind == "pass" else [""]
 	for part in parts:
 		var size: float = scale[part + "_size"] if part != "" else scale["size"]
@@ -448,10 +453,17 @@ static func classify(w: TerrainWindow, ref: TerrainWindow, kind: String, p: Vect
 		out[label + "_radius"] = r
 		out[label + "_reference"] = want
 		out[label + "_kept"] = kept
-		if r < RESOLVE_CELLS * w.cell:
-			resolved = false
-		ok = ok and kept >= minf(KEEP_SHARE * want, want - tol)
+		var part_resolved := r >= RESOLVE_CELLS * w.cell
+		var part_ok := kept >= minf(KEEP_SHARE * want, want - tol)
+		out[label + "_resolved"] = part_resolved
+		if part_resolved:
+			any_resolved = true
+		else:
+			exempt.append(label)
 		if kind == "pass":
+			out[label + "_ok"] = part_ok
+			if part_resolved:
+				ok = ok and part_ok
 			continue
 		# Lage des Gipfels bzw. Talgrunds auf dieser Stufe.
 		var reach := maxf(r * 0.5, RESOLVE_CELLS * w.cell)
@@ -477,17 +489,20 @@ static func classify(w: TerrainWindow, ref: TerrainWindow, kind: String, p: Vect
 		out["offset_allowed_m"] = allowed
 		out["extreme_height"] = best_h
 		out["tolerance_m"] = tol
-		ok = ok and (best.distance_to(p) <= allowed or absf(best_h - h) <= tol)
-	out["resolved"] = resolved
+		part_ok = part_ok and (best.distance_to(p) <= allowed or absf(best_h - h) <= tol)
+		out[label + "_ok"] = part_ok
+		if part_resolved:
+			ok = ok and part_ok
+	out["resolved"] = any_resolved
+	out["exempt"] = exempt
 	out["ok"] = ok
-	if not resolved:
-		out["note"] = "kleiner als %s Zellen – darf geglättet sein" % String.num(RESOLVE_CELLS * 2.0, 0)
+	if not exempt.is_empty():
+		out["note"] = "%s kleiner als %s Zellen – darf geglättet sein" % [", ".join(PackedStringArray(exempt)), String.num(RESOLVE_CELLS * 2.0, 0)]
 	return out
 
 
-## Erlaubte Höhenabweichung einer Stufe mit Zellgröße cell an p gegenüber dem feinsten Stand: 20 m
-## plus die Hälfte des Reliefs, das diese Stufe nicht mehr auflösen kann (Spannweite im feinen
-## Ausschnitt fine innerhalb von 1,5 Zellen).
+## Frühere, weite Höhentoleranz (nur noch zur Information in der Ortsprüfung): 20 m plus die Hälfte
+## der Spannweite im feinen Ausschnitt fine innerhalb von 1,5 Zellen.
 static func height_tolerance(fine: TerrainWindow, p: Vector2, cell: float) -> float:
 	var span := disc_range(fine, p, RESOLVE_CELLS * cell)
 	return 20.0 + 0.5 * (span.y - span.x)
@@ -501,3 +516,82 @@ static func cell_mean(fine: TerrainWindow, p: Vector2, cell: float, n: int = 64)
 		var q := p + Vector2(cos(k * GOLDEN), sin(k * GOLDEN)) * cell * 0.5 * sqrt((k + 0.5) / n)
 		sum += fine.height_at(q.x, q.y)
 	return sum / (n + 1)
+
+
+## Erlaubte Abweichung einer Stufe mit Zellgröße cell vom Zellmittel des feinen Geländes an p:
+## 20 m plus 15 % der Spannweite des feinen Geländes innerhalb einer Zelle.
+static func cell_mean_tolerance(fine: TerrainWindow, p: Vector2, cell: float) -> float:
+	var span := disc_range(fine, p, cell)
+	return 20.0 + 0.15 * (span.y - span.x)
+
+
+## Erlaubter mittlerer Versatz über ein Prüfraster: 20 m plus 10 % der Höhenspanne des Rasters.
+static func bias_limit(values: PackedFloat64Array) -> float:
+	if values.is_empty():
+		return 20.0
+	var lo := values[0]
+	var hi := values[0]
+	for v in values:
+		lo = minf(lo, v)
+		hi = maxf(hi, v)
+	return 20.0 + 0.1 * (hi - lo)
+
+
+## Liegt die Kreisscheibe (Mitte p, Radius r) ganz im Ausschnitt?
+static func fits(w: TerrainWindow, p: Vector2, r: float) -> bool:
+	var half := w.size * 0.5
+	return absf(p.x - w.cx) + r <= half and absf(p.y - w.cy) + r <= half
+
+
+## Korrelation (Pearson) zweier gleich langer Wertereihen; 0, wenn eine davon konstant ist.
+static func correlation(a: PackedFloat64Array, b: PackedFloat64Array) -> float:
+	var n := mini(a.size(), b.size())
+	if n < 2:
+		return 0.0
+	var ma := 0.0
+	var mb := 0.0
+	for k in n:
+		ma += a[k]
+		mb += b[k]
+	ma /= n
+	mb /= n
+	var sab := 0.0
+	var saa := 0.0
+	var sbb := 0.0
+	for k in n:
+		var da := a[k] - ma
+		var db := b[k] - mb
+		sab += da * db
+		saa += da * da
+		sbb += db * db
+	if saa <= 0.0 or sbb <= 0.0:
+		return 0.0
+	return sab / sqrt(saa * sbb)
+
+
+## Verlauf einer Kamm- (ridge) oder Tallinie: Punkte im Abstand höchstens step entlang des
+## Linienzugs line (Vector2). Je Punkt q mit Querrichtung n: Der höchste (Kamm) bzw. tiefste (Tal)
+## Wert quer zur Linie innerhalb von ±shift muss höher bzw. tiefer sein als beide Seiten im Abstand
+## ±side. height: Callable(Vector2) -> float. Ergebnis [{"point", "kept", "line", "sides"}, …].
+static func course(height: Callable, line: Array, step: float, shift: float, side: float, ridge: bool) -> Array:
+	var out := []
+	for s in line.size() - 1:
+		var a: Vector2 = line[s]
+		var b: Vector2 = line[s + 1]
+		var length := a.distance_to(b)
+		if length < 1e-6:
+			continue
+		var u := (b - a) / length
+		var n := Vector2(-u.y, u.x)
+		var count := maxi(1, int(ceil(length / step)))
+		for k in range(0 if out.is_empty() else 1, count + 1):
+			var q := a + u * (length * k / count)
+			var best: float = height.call(q)
+			for t in range(-4, 5):
+				var v: float = height.call(q + n * (shift * t / 4.0))
+				best = maxf(best, v) if ridge else minf(best, v)
+			var s1: float = height.call(q + n * side)
+			var s2: float = height.call(q - n * side)
+			var kept := best > maxf(s1, s2) if ridge else best < minf(s1, s2)
+			out.append({"point": q, "kept": kept, "line": best, "sides": [s1, s2]})
+	return out

@@ -10,11 +10,14 @@ Bildern läuft unten links die Uhr.
 Ausgabe: Motion-JPEG in einem selbst geschriebenen AVI-Behälter (RIFF: hdrl/strl/movi mit
 '00dc'-Blöcken und idx1, Kennung MJPG) – ohne ffmpeg, nur Python 3 und Pillow. Nach dem
 Schreiben wird die Datei wieder eingelesen und geprüft (Kopf, Bildzahl, Dauer, Index).
+Stehende Bilder (gleiches Ausgangsbild, gleiche Einblendung) werden nur einmal kodiert. Vor dem
+Schreiben wird die Größe geschätzt; über --max-mb (Vorgabe 1000 MiB, unter der 1-GiB-Grenze von
+AVI 1.0) wird in Teile <Name>_teilN.avi geteilt (oder mit --nicht-teilen abgebrochen).
 
 Aufruf:
   python tools/make_video.py <Ordner> [--out film.avi] [--fps 25] [--quality 85]
-                             [--kontaktbogen bogen.jpg]
-  python tools/make_video.py --pruefen film.avi
+                             [--kontaktbogen bogen.jpg] [--max-mb 1000] [--nicht-teilen]
+  python tools/make_video.py --pruefen film.avi [film_teil2.avi …]
 """
 
 import argparse
@@ -58,8 +61,10 @@ def num(value, digits=1):
 
 
 def clock(seconds):
-    minutes = int(seconds // 60)
-    return "%d:%s" % (minutes, num(seconds - minutes * 60, 1).zfill(4))
+    """Minuten:Sekunden,Zehntel – erst auf Zehntel runden, dann teilen (nie „0:60,0“)."""
+    tenths = int(round(max(seconds, 0.0) * 10.0))
+    minutes, rest = divmod(tenths, 600)
+    return "%d:%02d,%d" % (minutes, rest // 10, rest % 10)
 
 
 # --- Aufnahme lesen --------------------------------------------------------------------------
@@ -91,23 +96,32 @@ class Stamper:
         self.font_small = load_font(int(round(16 * scale)))
         self.font_big = load_font(int(round(24 * scale)), bold=True)
 
-    def stamp(self, image, t, pause):
+    @staticmethod
+    def texts(t, pause):
+        """Alles, was eingeblendet wird, als Schlüssel: Uhr, Pausentitel, Ursache, Balken (Zehntel).
+        Gleicher Schlüssel und gleiches Ausgangsbild → gleiches Filmbild."""
+        if pause is None:
+            return ("Zeit " + clock(t), None, None, None)
+        elapsed = round(min(t - pause["start_s"], pause["duration_s"]), 1)
+        title = "Rechenpause %s s von %s s – das Bild steht still" % (num(elapsed), num(pause["duration_s"]))
+        cause = pause.get("ursache") or pause.get("handlung") or ""
+        frac = elapsed / pause["duration_s"] if pause["duration_s"] > 0 else 1.0
+        return ("Zeit " + clock(t), title, cause, round(min(frac, 1.0), 3))
+
+    def stamp(self, image, key):
         s = self.scale
         draw = ImageDraw.Draw(image, "RGBA")
         w, h = image.size
+        text, title, cause, frac = key
         # Uhr unten links (über der Maßstabsleiste des Editors).
-        text = "Zeit " + clock(t)
         box = draw.textbbox((0, 0), text, font=self.font)
         x, y = int(14 * s), h - int(78 * s)
         draw.rounded_rectangle((x - 8 * s, y - 6 * s, x + box[2] + 8 * s, y + box[3] + 8 * s),
                                radius=6 * s, fill=WOOD + (200,), outline=BRASS + (200,), width=max(1, int(s)))
         draw.text((x, y), text, font=self.font, fill=PARCHMENT)
-        if pause is None:
+        if title is None:
             return
         # Rechenpause: Tafel in Bildmitte oben, Laufzeit, Fortschritt, Ursache.
-        elapsed = min(t - pause["start_s"], pause["duration_s"])
-        title = "Rechenpause %s s von %s s – das Bild steht still" % (num(elapsed), num(pause["duration_s"]))
-        cause = pause.get("ursache") or pause.get("handlung") or ""
         tb = draw.textbbox((0, 0), title, font=self.font_big)
         cb = draw.textbbox((0, 0), cause, font=self.font_small)
         pw = max(tb[2], cb[2]) + int(40 * s)
@@ -121,7 +135,6 @@ class Stamper:
         bar_y = py + ph - int(10 * s)
         bar_x0, bar_x1 = px + 20 * s, px + pw - 20 * s
         draw.rectangle((bar_x0, bar_y, bar_x1, bar_y + 4 * s), fill=(70, 60, 48, 255))
-        frac = elapsed / pause["duration_s"] if pause["duration_s"] > 0 else 1.0
         draw.rectangle((bar_x0, bar_y, bar_x0 + (bar_x1 - bar_x0) * frac, bar_y + 4 * s), fill=BRASS + (255,))
 
 
@@ -135,8 +148,12 @@ def pause_at(pauses, starts, t):
     return None
 
 
+def source_index(times, t):
+    return max(0, bisect.bisect_right(times, t + 1e-6) - 1)
+
+
 def render(folder, times, pauses, starts, stamper, t, size, cache):
-    k = max(0, bisect.bisect_right(times, t + 1e-6) - 1)
+    k = source_index(times, t)
     if cache.get("index") != k:
         image = Image.open(frame_path(folder, k)).convert("RGB")
         if image.size != size:
@@ -144,8 +161,49 @@ def render(folder, times, pauses, starts, stamper, t, size, cache):
         cache["index"] = k
         cache["image"] = image
     image = cache["image"].copy()
-    stamper.stamp(image, t, pause_at(pauses, starts, t))
+    stamper.stamp(image, Stamper.texts(t, pause_at(pauses, starts, t)))
     return image, k
+
+
+class FrameEncoder:
+    """Filmbilder als JPEG; ein stehendes Bild (gleiches Ausgangsbild, gleiche Einblendung) wird
+    nur einmal kodiert, die Bytes werden wiederverwendet."""
+
+    def __init__(self, folder, times, pauses, starts, stamper, size, quality):
+        self.folder, self.times, self.pauses, self.starts = folder, times, pauses, starts
+        self.stamper, self.size, self.quality = stamper, size, quality
+        self.images = {}
+        self.jpegs = {}
+        self.encoded = 0
+        self.reused = 0
+
+    def _source(self, k):
+        if k not in self.images:
+            self.images.clear()
+            image = Image.open(frame_path(self.folder, k)).convert("RGB")
+            if image.size != self.size:
+                image = image.resize(self.size, Image.BILINEAR)
+            self.images[k] = image
+        return self.images[k]
+
+    def jpeg(self, t):
+        k = source_index(self.times, t)
+        key = (k,) + Stamper.texts(t, pause_at(self.pauses, self.starts, t))
+        data = self.jpegs.get(key)
+        if data is not None:
+            self.reused += 1
+            return data, k
+        image = self._source(k).copy()
+        self.stamper.stamp(image, key[1:])
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", quality=self.quality)
+        data = buffer.getvalue()
+        # Nur die jüngsten Einträge halten: Wiederholungen folgen unmittelbar aufeinander.
+        if len(self.jpegs) > 64:
+            self.jpegs.clear()
+        self.jpegs[key] = data
+        self.encoded += 1
+        return data, k
 
 
 # --- AVI (RIFF) schreiben --------------------------------------------------------------------
@@ -213,6 +271,10 @@ class AviWriter:
         self.f.seek(pos + 4)
         self.f.write(struct.pack("<I", end - pos - 8))
         self.f.seek(end)
+
+    def projected(self, jpeg_len):
+        """Dateigröße, wenn noch ein Bild dieser Länge dazukommt (mit Index)."""
+        return self.f.tell() + 8 + jpeg_len + (jpeg_len & 1) + 8 + 16 * (len(self.index) + 1)
 
     def add(self, jpeg):
         pos = self.f.tell()
@@ -362,20 +424,41 @@ def contact_sheet(folder, times, pauses, starts, stamper_full, size, duration, o
 
 # --- Ablauf ----------------------------------------------------------------------------------
 
+def part_path(out, number, expected):
+    """Erster Teil heißt wie verlangt, solange nur einer erwartet wird; sonst <Name>_teilN.avi."""
+    if number == 1 and expected == 1:
+        return out
+    base, ext = os.path.splitext(out)
+    return "%s_teil%d%s" % (base, number, ext or ".avi")
+
+
 def main():
+    # Windows-Konsole (cp1252) kennt Zeichen wie „≈“ nicht: Ausgabe immer als UTF-8.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
     parser = argparse.ArgumentParser(description="Film aus einer Echtzeit-Aufnahme (--echtzeit=<Ordner>).")
     parser.add_argument("ordner", nargs="?")
     parser.add_argument("--out")
     parser.add_argument("--fps", type=int, default=25)
     parser.add_argument("--quality", type=int, default=85)
     parser.add_argument("--kontaktbogen")
-    parser.add_argument("--pruefen", metavar="AVI", help="nur eine vorhandene AVI-Datei prüfen")
+    parser.add_argument("--max-mb", type=float, default=1000.0,
+                        help="höchstens so groß wird eine AVI-Datei (MiB, Vorgabe 1000 – unter der 1-GiB-Grenze "
+                             "von AVI 1.0); größere Filme werden in Teile geteilt")
+    parser.add_argument("--nicht-teilen", action="store_true",
+                        help="statt zu teilen abbrechen, wenn die Schätzung über --max-mb liegt")
+    parser.add_argument("--pruefen", metavar="AVI", nargs="+", help="nur vorhandene AVI-Dateien prüfen")
     args = parser.parse_args()
 
     if args.pruefen:
-        info = check_avi(args.pruefen)
-        print(json.dumps(info, ensure_ascii=False, indent=1))
-        return 0 if info["ok"] else 1
+        all_ok = True
+        for path in args.pruefen:
+            info = check_avi(path)
+            print(path)
+            print(json.dumps(info, ensure_ascii=False, indent=1))
+            all_ok = all_ok and info["ok"]
+        return 0 if all_ok else 1
     if not args.ordner:
         parser.error("Ordner der Aufnahme fehlt")
 
@@ -392,34 +475,83 @@ def main():
     out = args.out or os.path.join(folder, "echtzeit.avi")
     duration = times[-1] + 0.5
     total = int(duration * args.fps)
-    writer = AviWriter(out, size[0], size[1], args.fps)
-    cache = {}
+    limit = int(args.max_mb * 1048576)
+    encoder = FrameEncoder(folder, times, pauses, starts, stamper, size, args.quality)
+
+    # Größe vorher schätzen: gleichmäßig verteilte Probebilder kodieren (jedes Filmbild wird
+    # geschrieben, auch ein wiederholtes – nur das Kodieren entfällt).
+    samples = min(total, 40)
+    sample_bytes = [len(encoder.jpeg((n + 0.5) * duration / samples)[0]) for n in range(samples)]
+    mean = sum(sample_bytes) / float(len(sample_bytes))
+    estimate = 8192 + total * (mean + 8 + 1 + 16)
+    parts = 1 if estimate <= limit else int(-(-estimate // (limit * 0.95)))
+    print("Schätzung: %d Filmbilder × %s KB ≈ %s MB (Grenze je Datei %s MB) → %d Datei%s"
+          % (total, num(mean / 1024.0, 1), num(estimate / 1048576.0, 1), num(limit / 1048576.0, 1),
+             parts, "" if parts == 1 else "en"))
+    if parts > 1 and args.nicht_teilen:
+        print("Abbruch: Film wäre größer als %s MB (--nicht-teilen)." % num(limit / 1048576.0, 1))
+        return 2
+    per_part = -(-total // parts)
+    encoder.encoded = encoder.reused = 0
+
+    outputs = []
+    number = 1
+    path = part_path(out, number, parts)
+    writer = AviWriter(path, size[0], size[1], args.fps)
+    in_part = 0
     used = set()
     for n in range(total):
         t = n / float(args.fps)
-        image, k = render(folder, times, pauses, starts, stamper, t, size, cache)
+        jpeg, k = encoder.jpeg(t)
         used.add(k)
-        buffer = io.BytesIO()
-        image.save(buffer, format="JPEG", quality=args.quality)
-        writer.add(buffer.getvalue())
+        if in_part > 0 and (in_part >= per_part or writer.projected(len(jpeg)) > limit):
+            writer.close()
+            outputs.append(path)
+            number += 1
+            path = part_path(out, number, max(parts, number))
+            writer = AviWriter(path, size[0], size[1], args.fps)
+            in_part = 0
+        writer.add(jpeg)
+        in_part += 1
         if n % 250 == 0:
             print("  Filmbild %d / %d" % (n, total))
     writer.close()
-    info = check_avi(out)
-    print("Film: %s" % out)
-    print("  %d Bilder, %s Bilder/s, %s s, %s MB, %d von %d aufgenommenen Bildern verwendet"
-          % (info.get("bilder_avih", 0), num(info.get("bilder_je_s", 0), 0), num(info.get("dauer_s", 0), 2),
-             num(info["datei_bytes"] / 1048576.0, 1), len(used), len(times)))
-    print("  Prüfung: %s %s" % ("in Ordnung" if info["ok"] else "FEHLER", "; ".join(info["probleme"])))
-    print("  Rechenpausen: %d, zusammen %s s; längste %s s" % (
-        len(pauses), num(sum(p["duration_s"] for p in pauses), 2),
+    outputs.append(path)
+
+    all_ok = True
+    total_bytes = 0
+    total_seconds = 0.0
+    for path in outputs:
+        info = check_avi(path)
+        too_big = info["datei_bytes"] > limit
+        ok = info["ok"] and not too_big
+        all_ok = all_ok and ok
+        total_bytes += info["datei_bytes"]
+        total_seconds += info.get("dauer_s", 0.0)
+        print("Film: %s" % path)
+        print("  %d Bilder, %s Bilder/s, %s s, %s MB" % (info.get("bilder_avih", 0), num(info.get("bilder_je_s", 0), 0),
+                                                       num(info.get("dauer_s", 0), 2), num(info["datei_bytes"] / 1048576.0, 1)))
+        print("  Prüfung: %s %s" % ("in Ordnung" if ok else "FEHLER",
+                                    "; ".join(info["probleme"] + (["größer als die Grenze"] if too_big else []))))
+    print("Zusammen: %d Datei%s, %s s, %s MB; %d Filmbilder kodiert, %d wiederverwendet; %d von %d aufgenommenen Bildern verwendet"
+          % (len(outputs), "" if len(outputs) == 1 else "en", num(total_seconds, 2), num(total_bytes / 1048576.0, 1),
+             encoder.encoded, encoder.reused, len(used), len(times)))
+    print("  Rechenpausen (ab %s ms): %d, zusammen %s s; längste %s s" % (
+        num(report.get("pause_ab_ms", 0), 0), len(pauses), num(sum(p["duration_s"] for p in pauses), 2),
         num(max((p["duration_s"] for p in pauses), default=0.0), 2)))
     for p in pauses:
         print("    %6s s  %5s s  %s" % (num(p["start_s"], 2), num(p["duration_s"], 2), p.get("ursache", "")))
+    hitches = report.get("ruckler")
+    if isinstance(hitches, dict):
+        print("  Ruckler (%s–%s ms): %d, zusammen %s s, davon beim Malen %d" % (
+            num(hitches["bereich_ms"][0], 0), num(hitches["bereich_ms"][1], 0), hitches["anzahl"],
+            num(hitches["gesamt_s"], 2), hitches.get("beim_malen", 0)))
+        for h in hitches.get("groesste", [])[:8]:
+            print("    %6s s  %5s ms  %s (%s)" % (num(h["start_s"], 2), num(h["dauer_ms"], 1), h["handlung"], h["zustand"]))
     if args.kontaktbogen:
         picks = contact_sheet(folder, times, pauses, starts, stamper, size, duration, args.kontaktbogen)
         print("Kontaktbogen: %s (%d Bilder)" % (args.kontaktbogen, len(picks)))
-    return 0 if info["ok"] else 1
+    return 0 if all_ok else 1
 
 
 if __name__ == "__main__":
