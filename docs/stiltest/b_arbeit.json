@@ -1,0 +1,23 @@
+{
+  "buffer_mem_mb": 37.2155799865723,
+  "draw_calls": 62.0,
+  "fps_avg": 263.476608985782,
+  "frame_ms_avg": 3.79540333333333,
+  "frame_ms_p95": 4.385,
+  "gpu": "NVIDIA GeForce RTX 2070 SUPER",
+  "instances": {
+    "grass": 6000,
+    "rock": 46,
+    "shrub": 40,
+    "tree": 24
+  },
+  "load_ms": 296.246,
+  "objects": 306.0,
+  "primitives": 2737226.0,
+  "resolution": "(1440.0, 900.0)",
+  "static_mem_mb": 67.6640748977661,
+  "texture_mem_mb": 227.02490234375,
+  "variant": "B",
+  "video_mem_mb": 317.558380126953,
+  "view": "arbeit"
+}

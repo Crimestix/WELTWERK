@@ -6,8 +6,9 @@ extends Node3D
 ## und Abstand darauf. Gedreht wird nicht (Entscheidung des Spielleiters, 21. 11. 2026).
 ## Bedienung mit Maus, Tastatur und Trackpad (MacBook).
 
-## Gelände, auf dem der Blickpunkt liegt. Ohne Gelände gilt ebener Boden auf Höhe 0.
-@export var terrain: Terrain
+## Gelände, auf dem der Blickpunkt liegt (braucht height_at, raycast, world_rect).
+## Ohne Gelände gilt ebener Boden auf Höhe 0.
+@export var terrain: Node3D
 ## Sonne: Ihre Schattenweite folgt dem Zoom, damit Schatten nah scharf und fern vorhanden sind.
 @export var sun: DirectionalLight3D
 
@@ -196,11 +197,12 @@ func _ground_height(x: float, z: float) -> float:
 
 
 func _clamp_to_world(point: Vector3) -> Vector3:
-	if terrain == null or terrain.field == null:
+	if terrain == null:
 		return point
-	var field := terrain.field
-	var s := field.size()
+	var rect: Rect2 = terrain.world_rect()
+	if rect.size == Vector2.ZERO:
+		return point
 	return Vector3(
-		clampf(point.x, field.origin.x, field.origin.x + s.x),
+		clampf(point.x, rect.position.x, rect.end.x),
 		point.y,
-		clampf(point.z, field.origin.y, field.origin.y + s.y))
+		clampf(point.z, rect.position.y, rect.end.y))

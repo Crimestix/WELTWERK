@@ -4,58 +4,12 @@
 [ext_resource type="Script" path="res://src/world/terrain.gd" id="2_terrain"]
 [ext_resource type="Script" path="res://src/camera/strategy_camera.gd" id="3_camera"]
 [ext_resource type="Script" path="res://src/ui/controls_help.gd" id="4_help"]
-
-[sub_resource type="ProceduralSkyMaterial" id="SkyMaterial"]
-sky_top_color = Color(0.16, 0.34, 0.62, 1)
-sky_horizon_color = Color(0.55, 0.68, 0.8, 1)
-sky_curve = 0.1
-ground_bottom_color = Color(0.06, 0.12, 0.18, 1)
-ground_horizon_color = Color(0.55, 0.68, 0.8, 1)
-sun_angle_max = 25.0
-sun_curve = 0.12
-
-[sub_resource type="Sky" id="Sky"]
-sky_material = SubResource("SkyMaterial")
-radiance_size = 3
-
-[sub_resource type="Environment" id="Environment"]
-background_mode = 2
-sky = SubResource("Sky")
-ambient_light_source = 3
-ambient_light_energy = 0.55
-reflected_light_source = 2
-tonemap_mode = 4
-tonemap_exposure = 1.15
-glow_enabled = true
-glow_intensity = 0.2
-glow_bloom = 0.03
-fog_enabled = true
-fog_light_color = Color(0.6, 0.7, 0.82, 1)
-fog_sun_scatter = 0.1
-fog_density = 0.00035
-fog_aerial_perspective = 0.15
-fog_sky_affect = 0.2
-adjustment_enabled = true
-adjustment_contrast = 1.06
-adjustment_saturation = 1.18
+[ext_resource type="PackedScene" path="res://scenes/lighting.tscn" id="5_lighting"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1_main")
 
-[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
-environment = SubResource("Environment")
-
-[node name="Sun" type="DirectionalLight3D" parent="."]
-rotation = Vector3(-0.62, -2.3, 0)
-light_color = Color(1, 0.94, 0.84, 1)
-light_energy = 1.6
-shadow_enabled = true
-shadow_bias = 0.06
-shadow_normal_bias = 2.0
-shadow_blur = 1.5
-directional_shadow_mode = 2
-directional_shadow_blend_splits = true
-directional_shadow_max_distance = 600.0
+[node name="Lighting" parent="." instance=ExtResource("5_lighting")]
 
 [node name="Terrain" type="Node3D" parent="."]
 script = ExtResource("2_terrain")
@@ -63,7 +17,7 @@ script = ExtResource("2_terrain")
 [node name="CameraRig" type="Node3D" parent="." node_paths=PackedStringArray("terrain", "sun")]
 script = ExtResource("3_camera")
 terrain = NodePath("../Terrain")
-sun = NodePath("../Sun")
+sun = NodePath("../Lighting/Sun")
 
 [node name="Camera3D" type="Camera3D" parent="CameraRig"]
 current = true

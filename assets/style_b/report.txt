@@ -1,0 +1,11 @@
+tree_b_1: 2180 Dreiecke, 191 KB
+tree_b_2: 2536 Dreiecke, 223 KB
+tree_b_3: 2536 Dreiecke, 222 KB
+grass_b_1: 108 Dreiecke
+grass_b_2: 108 Dreiecke
+bush_b_1: 960 Dreiecke
+bush_b_2: 1280 Dreiecke
+rock_moss_set_02_b: 57647 → 5991 Dreiecke, 766 KB
+boulder_01_b: 66122 → 26611 Dreiecke, 4701 KB
+rock_07_b: 14844 → 2500 Dreiecke, 1751 KB
+Dauer: 3.5 s

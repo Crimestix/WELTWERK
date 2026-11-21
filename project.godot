@@ -55,6 +55,13 @@ toggle_help={
 "events": [Object(InputEventKey,"physical_keycode":4194332)]
 }
 
+[importer_defaults]
+
+texture={
+"compress/mode": 2,
+"mipmaps/generate": true
+}
+
 [rendering]
 
 renderer/rendering_method="forward_plus"

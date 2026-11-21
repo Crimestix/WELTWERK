@@ -9,7 +9,10 @@ Arbeitsname, noch nicht sicher. Visueller Kampagneneditor für Pen & Paper (D&D 
 - Straßen zeichnen, Dinge direkt mit Informationen belegen. Gefühl wie ein Aufbau- oder
   Städtebauspiel.
 - Vorbilder: Level-Editor von Baldur's Gate, Stronghold, Weltenbau in der Unreal Engine,
-  vermutlich Manor Lords (beim Diktieren als „Menyr“ verstanden – noch bestätigen lassen).
+  **Menyr** (Worldbuilding- und VTT-Programm von NOG Studio – nicht Manor Lords; 21. 11. 2026).
+  Minecraft für kreative Freiheit, Planet Zoo für die Landschaftsansicht.
+- Sandbox Worldbuilder: Schon das Landschaftsbauen soll spielerisch Freude machen – formen,
+  ausprobieren, hineinzoomen, weiterbauen. Auftrag und Ablauf: `docs/PLAN.md`.
 - Später: Anbindung an Wayfarer, den digitalen Spielleiterschirm des Spielleiters (Kampagne =
   Ordner mit JSON-Dateien). Vorerst ignorieren (Entscheidung des Spielleiters, 21. 11. 2026:
   „Ignoriere aktuell noch Wayfarer“) – erst das Werkzeug selbst.
@@ -91,15 +94,27 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
 „Gespeichert“, Pinselkreis mit Einstellungen.
 
 ## Noch offen
-- Vorbild „Menyr“ = Manor Lords? Bestätigen lassen.
-- Datenstruktur für das durchgehende Zoomen (Globus → Kontinent → Region) – nächster großer
-  Schritt; der Plan des Spielleiters (mit ChatGPT erarbeitet) steht noch aus.
-- Stiltest für Gelände, Wasser, Felsen, Vegetation: Pakete auswählen.
+- Bildsprache nach dem Stiltest (`docs/STILTEST.md`): Empfehlung Gelände/Felsen wie B, für
+  Bäume einen dritten Weg testen – Entscheidung des Spielleiters steht aus.
+- Higgsfield-Programm ist nicht installiert (Installation nur mit Okay des Spielleiters).
 - Leistung auf dem MacBook Air noch nicht gemessen.
+
+## Bestand und Lizenzen
+- Fremdbestände nur mit klarer Lizenz; Herkunft, Lizenz, Urheber und Größe in `docs/STILTEST.md`
+  bzw. `assets/external/polyhaven/sources.json` festhalten. Poly Haven = CC0.
+- Große Downloads nicht einchecken (`assets/external/` ist ausgeschlossen); stattdessen ein
+  Ladeskript (`tools/fetch_polyhaven.ps1`). Eigene Blender-Bestände per Skript
+  (`tools/blender/`), mit festem Ausgangswert, Ergebnis klein genug fürs Repository.
+- Laubmodelle nicht mit Godots automatischer Vereinfachung (LOD) importieren – sie rechnet
+  Blätter weg. Normalenkarten beim Import als solche markieren (`tools/run_style_test.ps1`).
 
 ## Aufbau
 - `project.godot` – Projekteinstellungen, Tastenbelegung (`[input]`).
 - `scenes/main.tscn` – Hauptszene: Himmel, Sonne, Gelände, Kamera, Steuerungshilfe.
+- `scenes/lighting.tscn` – gemeinsames Licht (Himmel, Sonne, Nebel) für alle Szenen.
+- `scenes/style_test.tscn`, `src/style_test/` – Stiltest A/B (`docs/STILTEST.md`).
+- `tools/` – Ladeskript Poly Haven, Blender-Skripte, Stiltest-Messlauf.
+- `docs/` – Plan, Stiltest-Bericht (für Godot ausgeblendet per `.gdignore`).
 - `src/domain/` – reine Fachlogik: `fixed_random.gd` (fester Zufall), `heightfield.gd`
   (Höhenfeld: Erzeugung, Höhe an Punkt, Strahl trifft Gelände).
 - `src/world/` – Darstellung der Welt: `terrain.gd` (Netz aus dem Höhenfeld, Wasser),
