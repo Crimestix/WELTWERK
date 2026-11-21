@@ -46,3 +46,6 @@ desktop.ini
 
 # Arbeitskopien paralleler Agenten
 /.claude/worktrees/
+
+# Filmaufnahme (groß, wird neu erzeugt: --write-movie … -- --aufnahme=<Ordner>)
+/docs/aufnahme/*.ogv

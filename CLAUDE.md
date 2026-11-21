@@ -89,7 +89,7 @@ Projekt. Ein hochwertiges Werkzeug aus der Spielwelt, kein Admin-Dashboard.
    Zuständigkeit dafür vor der Integration festlegen.
 
 ## Bildideen (21. 11. 2026)
-Vier Konzeptbilder (nicht im Repository): Globus mit Breitengraden und „Kontinent platzieren“
+Vier Konzeptbilder (`docs/referenz/*_konzept.webp`; Kontinentalreferenz: `kontinent_konzept.webp`): Globus mit Breitengraden und „Kontinent platzieren“
 (Größe, Breitengrad, Ausrichtung, „Klima aus Lage“) · Landform von oben (Land hinzufügen,
 Land abtragen, Küste glätten, Pinselgröße in km) · Kontinent schräg von oben (Gebirge, Wald,
 Fluss, See; „Bereich vertiefen“ → Region, „Landschaft wird übernommen“) · Region nah
@@ -100,11 +100,13 @@ mit Schnee, Sandstrände, türkisfarbenes Flachwasser über tiefem Blau, natürl
 Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rückgängig,
 „Gespeichert“, Pinselkreis mit Einstellungen.
 
-## Noch offen (Stand 21. 11. 2026, Einzelheiten docs/BERICHT_KONTINENTE.md)
+## Noch offen (Stand 21. 11. 2026, Einzelheiten docs/BERICHT_KONTINENTEDITOR.md)
+- Kartenbild noch ruhiger als die Referenz (Kleinrelief, verästelte Gewässer, Fjorde).
 - Flüssiger Übergang zwischen Maßstäben (heute Wechsel; Daten sind dafür bereit).
-- Formen nachträglich anfassen/verschieben; erzeugte Grundform als bearbeitbare Form.
+- Erzeugte Grundform als bearbeitbare Form; Gelände folgt beim Formziehen erst beim Loslassen.
 - Regionen mit Namen und Liste, Rechteck aufziehen; Flüsse, die sich selbst einen Weg suchen.
 - Überlappende Kontinente nur gemeldet, nicht zusammengeführt; Rückgängig gilt je Sitzung.
+- Schriften (Cormorant, Cinzel, Crimson Pro) noch nicht im Projekt.
 
 ## Bestand und Lizenzen
 - Fremdbestände nur mit klarer Lizenz; Herkunft, Lizenz, Urheber und Größe in `docs/STILTEST.md`
@@ -147,6 +149,15 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
   `meadow.gdshaderinc` (eine Wiesenfarbe für Boden und Gras), `water_clear.gdshader`,
   `rock_granite.gdshader`, `grass_cards.gdshader`, `target_landscape.gd` (Landschaft, rein).
 - `src/editor/landscape_detail.gdshader` – Editor-Boden im Zielstil (Ausschnitte bis 4,2 km).
+- `src/editor/landscape.gdshader` – Kartenbild grober Ausschnitte (bikubische Schummerung, Wald als
+  Dichte, Muster in festen Metern); `sea.gdshader` (Meer/Seen nach Tiefe, Küstenschein),
+  `river.gdshader` (Flüsse als Bänder).
+- `src/editor/shape_editor.gd` + `src/domain/world/shape_edit.gd` – Werkzeug „Formen bearbeiten“
+  (Wählen, Verschieben, Punkte, Skalieren, Drehen, Löschen; Befehle replace/remove_stroke).
+- `src/editor/editor_ui.gd` – Oberfläche: Gruppenleiste links, Werkzeugleiste unten, Einstellungen
+  erst nach Wahl, Hinweiszeile, Maßstab, Übersichtskarte; Symbole in `assets/ui/icons/*.svg`.
+- `src/editor/comparison_run.gd` (`--vergleich`), `recording_run.gd` (`--aufnahme`) – Vergleich mit
+  der Kontinentalreferenz und aufgezeichneter Bedienablauf.
 - `docs/BERICHT_KONTINENTE.md` – Bericht des Kontinent-Auftrags; `docs/abnahme/`, `docs/stufen/` Bilder.
 - `tools/profile_window.gd` – Auswertungszeit eines Ausschnitts je Bearbeitung messen.
 - `assets/target/` – Zielbestand (Blender-Skript + Higgsfield; Originale und Protokoll in
@@ -184,6 +195,8 @@ $godot = "C:\Users\Mattes\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-s
 & $godot --path D:\WELTWERK -- --neu                                            # leere Probewelt (user://welt_neu.json)
 & $godot --position 2000,60 --path D:\WELTWERK -- --abnahme=D:\WELTWERK\docs\abnahme --schritt=1  # Abnahme, dann --schritt=2
 & $godot --position 2000,60 --path D:\WELTWERK -- --welt=<welt.json> --stufen=<ordner> [--richtung=250]  # Bildreihe aller Stufen
+& $godot --position 2000,60 --path D:\WELTWERK -- --vergleich=<ordner>    # gleicher Umriss wie die Referenz, Bilder + Prüfungen
+& $godot --position 2000,60 --path D:\WELTWERK --write-movie <film.ogv> --fixed-fps 30 -- --aufnahme=<ordner>  # Bedienablauf filmen
 & $godot --path D:\WELTWERK res://scenes/style_test.tscn                         # Stiltest
 powershell -ExecutionPolicy Bypass -File tools\run_style_test.ps1                # Stiltest messen
 ```
@@ -222,3 +235,9 @@ Weltdatei: `user://welt.json` (Windows `%APPDATA%\Godot\app_userdata\Weltwerk\we
   Bäume streuen nach eigenem Ausgangswert (bleiben bei neuer Variante); Wiese und Wald auf
   mittleren Stufen in echten Metern (Kronendach-Luftbild); letzte Ansicht wird gemerkt (eigene
   Datei neben der Welt). Ausgegeben: 8 Guthaben (Stand 553,85). Bericht `docs/BERICHT_KONTINENTE.md`.
+- 21. 11. 2026 – Auftrag „Kontinenteditor ausarbeiten“ (Abnahmeziel: angenehm gestalten, Übersicht
+  wie eine hochwertige Fantasykarte). Routineentscheidungen: Kontinentebene mit 513er Raster; aus der
+  Ferne schmaler Bildwinkel (28°) und Neigung 55°; Überhöhung höchstens 7; Gewässer als eigene
+  Flächen; Schutzschraffur nur beim Werkzeug „Schützen“; gezeichnete Umrisse werden vereinfacht;
+  jedes Werkzeug merkt sich seine Größe; Gebirge folgt dem Strich als Kette; gezeichnete Kontinente
+  ohne eigene Gebirge in der Grundform. Higgsfield nicht genutzt. Bericht `docs/BERICHT_KONTINENTEDITOR.md`.
