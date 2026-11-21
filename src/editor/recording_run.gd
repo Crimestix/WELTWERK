@@ -67,6 +67,20 @@ func caption(text: String) -> void:
 	_caption.text = text
 
 
+## Standbild für die Übersicht (in <Ordner>/bilder/).
+var _dir := ""
+var _snap_count := 0
+
+
+func snap(label: String) -> void:
+	if _dir == "":
+		return
+	await RenderingServer.frame_post_draw
+	_snap_count += 1
+	var image := editor.get_viewport().get_texture().get_image()
+	image.save_jpg(_dir.path_join("bilder/%02d_%s.jpg" % [_snap_count, label]), 0.85)
+
+
 func frames(n: int) -> void:
 	await editor._frames(n)
 
@@ -166,6 +180,18 @@ func key(code: Key, ctrl := false, shift := false) -> void:
 	await frames(4)
 
 
+## Regler mit der Maus auf einen Wert ziehen (wie ein Nutzer: Knopf greifen, schieben).
+func drag_slider(slider: Range, value: float) -> void:
+	if slider == null or not slider.is_visible_in_tree():
+		checks["Regler sichtbar"] = false
+		return
+	var rect := slider.get_global_rect()
+	var span := slider.max_value - slider.min_value
+	var from := Vector2(rect.position.x + rect.size.x * (slider.value - slider.min_value) / span, rect.get_center().y)
+	var to := Vector2(rect.position.x + rect.size.x * (value - slider.min_value) / span, rect.get_center().y)
+	await drag(PackedVector2Array([from, to]), 4.0)
+
+
 ## Sichtbare Schaltfläche der Oberfläche finden (Text oder Hinweistext beginnt mit label).
 func find_button(label: String) -> Button:
 	return _find_button(editor.ui, label)
@@ -221,6 +247,8 @@ func choose(group: String, tool_label: String) -> void:
 
 
 func run(dir: String) -> void:
+	_dir = dir
+	DirAccess.make_dir_recursive_absolute(dir.path_join("bilder"))
 	_setup_overlay()
 	var started := Time.get_ticks_usec()
 	var comparison := ComparisonRun.new(editor)
@@ -243,22 +271,29 @@ func run(dir: String) -> void:
 	timing["Umriss zeichnen → Kontinent berechnet"] = (Time.get_ticks_usec() - t) / 1000.0
 	checks["Umriss ergibt Land"] = (editor.continent()["strokes"] as Array).size() == 1
 	await frames(30)
+	await snap("umriss")
 
 	# 2 Bucht wegschneiden
 	caption("2 · Eine Bucht wegschneiden")
 	await choose("Form", "Land wegschneiden")
 	await drag(ref_points(ComparisonRun.BAY + [ComparisonRun.BAY[0]]), 10.0)
 	await frames(30)
+	await snap("bucht")
 
 	# 3 Gebirge, Wald, Fluss, See
-	caption("3 · Gebirge entlang eines Strichs")
 	await choose("Gelände", "Gebirge")
+	caption("3 · Gebirge: Größe und Stärke einstellen, dann entlang eines Strichs malen")
+	await drag_slider(editor.ui._size_slider, 0.62)
+	await drag_slider(editor.ui._strength_slider, 0.95)
+	await frames(10)
 	for chain in ComparisonRun.MOUNTAINS.slice(0, 2):
 		await drag(ref_points(chain), 7.0)
 		await frames(10)
+	await snap("gebirge")
 	caption("Neu würfeln: gleiche Stelle, andere Form")
 	await press("Neu würfeln")
 	await frames(30)
+	await snap("neu_gewuerfelt")
 	caption("4 · Wald verteilen")
 	await choose("Bewuchs", "Wald verteilen")
 	for chain in ComparisonRun.FORESTS.slice(0, 3):
@@ -271,6 +306,7 @@ func run(dir: String) -> void:
 	await choose("Wasser", "See")
 	await click(ref(ComparisonRun.LAKES[0]))
 	await frames(30)
+	await snap("wald_fluss_see")
 
 	# 4 Form nachträglich ändern
 	caption("6 · Die gezeichnete Form nachträglich ändern")
@@ -278,6 +314,7 @@ func run(dir: String) -> void:
 	var land_point := ref(Vector2(700, 640))
 	await click(land_point)
 	await frames(20)
+	await snap("form_gewaehlt")
 	# Ostküste ein Stück nach außen ziehen (Punkt der Form unter dem Zeiger).
 	var shape: Dictionary = editor.continent()["strokes"][0]
 	var best := Vector2.ZERO
@@ -292,18 +329,22 @@ func run(dir: String) -> void:
 	if best_x > -INF:
 		await drag(PackedVector2Array([best, best + Vector2(70, 20)]), 4.0)
 	await frames(30)
+	checks["Umriss durch Ziehen verändert"] = not ShapeEdit.same_outline(shape, editor.continent()["strokes"][0], 1.0)
+	await snap("form_geaendert")
 	caption("Rückgängig und Wiederholen")
 	await press("Rückgängig")
 	await frames(30)
+	await snap("rueckgaengig")
 	await press("Wiederholen")
 	await frames(30)
-	checks["Form geändert, Anzahl Bearbeitungen gleich"] = (editor.continent()["strokes"] as Array).size() == before
+	checks["Nach Rückgängig und Wiederholen gleiche Zahl Bearbeitungen"] = (editor.continent()["strokes"] as Array).size() == before
 
 	# 5 Näher heran und zurück
 	caption("7 · Näher heran: Gebirge, Wald, Fluss")
 	await press("Ansehen")
 	await wheel(ref(Vector2(560, 400)), 6, true, 6)
 	await frames(40)
+	await snap("naeher")
 	await wheel(ref(Vector2(560, 400)), 6, false, 6)
 	await frames(30)
 
@@ -311,6 +352,7 @@ func run(dir: String) -> void:
 	caption("8 · Zurück zum Globus")
 	await press("Welt")
 	await frames(60)
+	await snap("globus")
 	caption("")
 	await frames(20)
 	timing["Ablauf gesamt (Wanduhr)"] = (Time.get_ticks_usec() - started) / 1000.0
