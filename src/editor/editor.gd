@@ -40,6 +40,8 @@ var _args := {}
 ## Einmaliger Hinweis in der Statuszeile (bis zur nächsten Änderung).
 var _notice := ""
 var _confirm: ConfirmationDialog
+## Ungespeicherte Änderungen vorhanden.
+var _dirty := false
 
 
 func _ready() -> void:
@@ -63,6 +65,13 @@ func _ready() -> void:
 	doc = null if fresh else WorldDocument.load_file(save_path)
 	if WorldDocument.load_problem != "":
 		_notice = WorldDocument.load_problem
+	var rescue := save_path.get_basename() + "_ersatz.json"
+	if doc == null and not fresh and FileAccess.file_exists(save_path) and FileAccess.file_exists(rescue):
+		# Hauptdatei beschädigt, aber schon eine Ersatzwelt angelegt: dort weiterarbeiten.
+		doc = WorldDocument.load_file(rescue)
+		if doc:
+			save_path = rescue
+			_notice = "Weltdatei beschädigt – es wird in %s weitergearbeitet." % rescue.get_file()
 	if doc == null:
 		if _args.has("demo"):
 			doc = WorldDocument.create(4242)
@@ -70,7 +79,7 @@ func _ready() -> void:
 			doc = WorldDocument.new()
 		if not fresh and FileAccess.file_exists(save_path):
 			# Beschädigte Datei ohne guten Ersatz: nichts überschreiben, bis der Spielleiter handelt.
-			save_path = save_path.get_basename() + "_neu.json"
+			save_path = rescue
 			_notice += " Neue Welt wird unter %s gespeichert." % save_path.get_file()
 	doc.changed.connect(_on_doc_changed)
 
@@ -94,12 +103,16 @@ func _ready() -> void:
 
 	landscape.camera = camera_rig.camera
 	landscape.stroke_finished.connect(_on_stroke_finished)
+	landscape.hint.connect(func(text: String) -> void:
+		_notice = text
+		_update_ui())
 	camera_rig.zoom_limit.connect(_on_zoom_limit)
 	globe.enter_continent.connect(func() -> void: open_continent(active_id))
 	globe.continent_clicked.connect(_select)
 	globe.continent_opened.connect(func(id: String) -> void: open_continent(id))
 	globe.empty_clicked.connect(func() -> void: _select(""))
 	globe.continent_dragged.connect(_on_continent_dragged)
+	globe.continent_drag_cancelled.connect(_on_continent_drag_cancelled)
 	ui.tool_selected.connect(_on_tool)
 	ui.brush_changed.connect(_on_brush)
 	ui.undo_pressed.connect(_undo)
@@ -128,7 +141,9 @@ func _ready() -> void:
 		pass
 	else:
 		open_globe()
-	if _args.has("abnahme"):
+	if _args.has("stufen"):
+		_run_levels(_args["stufen"])
+	elif _args.has("abnahme"):
 		_run_acceptance(_args["abnahme"], _args.get("schritt", "1"))
 	elif _args.has("screenshot"):
 		_screenshot_and_quit(_args["screenshot"])
@@ -136,7 +151,8 @@ func _ready() -> void:
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and doc:
-		_save_now()
+		if _dirty:
+			_save_now()
 		_save_view()
 
 
@@ -148,6 +164,8 @@ func _apply_target_light() -> void:
 	sun.light_energy = 2.75
 	sun.shadow_bias = 0.12
 	sun.shadow_normal_bias = 2.6
+	if _args.get("schatten", "") == "aus":
+		sun.shadow_enabled = false
 	var env: Environment = $Lighting/WorldEnvironment.environment
 	env.ambient_light_energy = 0.75
 	env.tonemap_exposure = 1.1
@@ -196,12 +214,14 @@ func _forget(id: String) -> void:
 
 
 func _select(id: String) -> void:
+	ui.commit_name()
 	active_id = id
 	globe.select(id)
 	_update_ui()
 
 
 func _on_new_continent(drawn: bool) -> void:
+	ui.commit_name()
 	var center := globe.view_center() if in_globe else Vector2(35.0, 10.0)
 	var seed_value := Crypto.new().generate_random_bytes(4).decode_u32(0) & 0x7FFFFFFF
 	var data := WorldDocument.new_continent(seed_value, WorldDocument.BASE_DRAWN if drawn else WorldDocument.BASE_GENERATED,
@@ -221,6 +241,7 @@ func _on_new_continent(drawn: bool) -> void:
 func _ask_delete() -> void:
 	if active_id == "":
 		return
+	ui.commit_name()
 	_confirm.dialog_text = "„%s“ vom Globus entfernen?\nRückgängig ist mit Strg/⌘ + Z möglich." % display_name(active_id)
 	_confirm.popup_centered()
 
@@ -243,6 +264,7 @@ func _on_name_changed(text: String) -> void:
 func open_continent(id: String) -> void:
 	if id == "" or not doc.has_continent(id):
 		return
+	ui.commit_name()
 	active_id = id
 	sampler = sampler_for(id)
 	levels = [{"cx": 0.0, "cy": 0.0, "size": continent()["size_km"] * 1000.0}]
@@ -523,8 +545,9 @@ func _after_placement_preview(field: String) -> void:
 func _on_continent_dragged(id: String, latitude: float, longitude: float, final: bool) -> void:
 	if not doc.has_continent(id):
 		return
-	if _drag_before.is_empty():
-		_drag_before = {"latitude": doc.get_value(id, "latitude"), "longitude": doc.get_value(id, "longitude")}
+	if _drag_before.get("id", "") != id:
+		_restore_drag()
+		_drag_before = {"id": id, "latitude": doc.get_value(id, "latitude"), "longitude": doc.get_value(id, "longitude")}
 	if not final:
 		doc.preview_value(id, "latitude", latitude)
 		doc.preview_value(id, "longitude", longitude)
@@ -540,15 +563,37 @@ func _on_continent_dragged(id: String, latitude: float, longitude: float, final:
 		doc.set_command(id, "longitude", longitude, before["longitude"])]))
 
 
+func _on_continent_drag_cancelled(_id: String) -> void:
+	_restore_drag()
+	globe.update_placement(doc.continents, doc.planet)
+	_update_ui()
+
+
+## Laufende Ziehvorschau verwerfen: alte Lage zurück, ohne Verlaufseintrag.
+func _restore_drag() -> void:
+	if _drag_before.is_empty():
+		return
+	var id: String = _drag_before["id"]
+	if doc.has_continent(id):
+		doc.preview_value(id, "latitude", _drag_before["latitude"])
+		doc.preview_value(id, "longitude", _drag_before["longitude"])
+	_drag_before = {}
+
+
 # --- Änderungen am Dokument ----------------------------------------------------------------
 
+## Gesperrt, solange gemalt oder ein Regler bzw. Kontinent gezogen wird.
+func _history_locked() -> bool:
+	return landscape.is_busy() or not _placement_before.is_empty() or not _drag_before.is_empty()
+
+
 func _undo() -> void:
-	if not landscape.is_busy():
+	if not _history_locked():
 		doc.undo()
 
 
 func _redo() -> void:
-	if not landscape.is_busy():
+	if not _history_locked():
 		doc.redo()
 
 
@@ -584,6 +629,8 @@ func _on_doc_changed(command: Dictionary, undone: bool) -> void:
 		for i in levels.size() - 1:
 			levels[i]["window"] = null
 		landscape.sampler = sampler
+		if levels.size() > 1 and _reaches_outside(command["stroke"], levels.back()):
+			landscape.update_context(_level_window(levels.size() - 2))
 		_on_brush(size_fraction, strength)
 		_update_minimap()
 		_update_ui()
@@ -607,12 +654,14 @@ func _unhandled_input(event: InputEvent) -> void:
 
 
 func _queue_save() -> void:
+	_dirty = true
 	ui.set_saved(false)
 	_save_timer.start()
 
 
 func _save_now() -> void:
 	var error := doc.save(save_path)
+	_dirty = error != OK
 	ui.set_saved(error == OK)
 	if error != OK:
 		push_error("Speichern fehlgeschlagen (%s): %s" % [error, save_path])
@@ -706,6 +755,13 @@ func _update_ui() -> void:
 		var level: Dictionary = levels.back()
 		ui.set_status(prefix + "Ausschnitt %s · %s · Höhen %s-fach überhöht · Klima: %s" % [
 			EditorUI.meters(level["size"]), extent, String.num(landscape.exaggeration, 1).replace(".", ","), s.climate["zone"]])
+
+
+## Reicht ein Strich (mit Radius) über den Ausschnitt hinaus? Dann ändert er auch die Umgebung.
+static func _reaches_outside(stroke: Dictionary, level: Dictionary) -> bool:
+	var b := Stroke.bounds(stroke)
+	var half: float = level["size"] * 0.5
+	return b[0] < level["cx"] - half or b[2] > level["cx"] + half or b[1] < level["cy"] - half or b[3] > level["cy"] + half
 
 
 static func _lat_text(latitude: float) -> String:
@@ -1137,6 +1193,45 @@ func _acceptance_continue(dir: String, report: Dictionary) -> void:
 	open_globe()
 	await _frames(30)
 	await _shot(dir.path_join("b03_globus_nach_neustart.jpg"))
+
+
+## Bildreihe über alle Maßstäbe an einer Küstenstelle des gewählten Kontinents (zur Bewertung
+## der Grafik): --stufen=<Ordner> [--richtung=<Grad>]. Speichert stufe_<n>.jpg und beendet.
+func _run_levels(dir: String) -> void:
+	DirAccess.make_dir_recursive_absolute(dir)
+	await _frames(10)
+	if active_id == "":
+		get_tree().quit()
+		return
+	open_continent(active_id)
+	var angle := deg_to_rad(float(_args.get("richtung", "200")))
+	var direction := Vector2(cos(angle), sin(angle))
+	var half: float = continent()["size_km"] * 500.0
+	var coast := _find_coast(direction, half)
+	var target := coast - direction * half * 0.004
+	var results := {}
+	for level in 5:
+		if level > 0:
+			deepen_at(landscape.to_render(target.x, target.y))
+			# Küste im neuen, feineren Ausschnitt genauer suchen und knapp landeinwärts zielen.
+			var w: TerrainWindow = levels.back()["window"]
+			var from := Vector2(w.cx, w.cy) - direction * w.size * 0.45
+			for s in 300:
+				var q := from + direction * (w.size * 0.9 * s / 300.0)
+				if w.height_at(q.x, q.y) < -0.5:
+					target = q - direction * w.size * 0.12
+					break
+		var size: float = levels.back()["size"]
+		camera_rig.jump_to(landscape.to_render(target.x, target.y).lerp(Vector3.ZERO, 0.5), camera_rig.max_distance * 0.55)
+		await _frames(25)
+		await _shot(dir.path_join("stufe_%d_%s.jpg" % [level, EditorUI.meters(size).replace(" ", "").replace(",", "_").replace(".", "")]))
+		camera_rig.jump_to(landscape.to_render(target.x, target.y), camera_rig.min_distance * 1.3)
+		await _frames(25)
+		await _shot(dir.path_join("stufe_%d_nah.jpg" % level))
+		await _measure("Stufe %d (%s)" % [level, EditorUI.meters(size)], results)
+	var file := FileAccess.open(dir.path_join("messwerte.json"), FileAccess.WRITE)
+	file.store_string(JSON.stringify(results, "  "))
+	get_tree().quit()
 
 
 ## Gleicher Inhalt? Zahlen auf 10⁻⁶ relativ gleich (ganz- und Kommazahlen gelten als gleich).

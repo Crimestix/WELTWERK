@@ -61,6 +61,7 @@ void fragment() {
 	float lat = degrees(asin(clamp(n.y, -1.0, 1.0)));
 	vec3 c = deep_color;
 	float rough = 0.55;
+	float land_acc = 0.0;
 	for (int k = 0; k < count; k++) {
 		vec4 reach = texelFetch(params, ivec2(k, 1), 0);
 		if (dot(n, reach.xyz) < reach.w) continue;
@@ -68,8 +69,11 @@ void fragment() {
 		if (!inside(uv)) continue;
 		vec4 col = texture(continent_color, vec3(uv, float(k)));
 		float h = texture(continent_data, vec3(uv, float(k))).r;
+		// Flachwasser nur dort, wo noch kein Land eines anderen Kontinents liegt.
 		vec3 sea = mix(shallow_color, c, smoothstep(-20.0, -600.0, h));
-		c = mix(sea, col.rgb, col.a);
+		c = mix(c, sea, 1.0 - land_acc);
+		c = mix(c, col.rgb, col.a);
+		land_acc = max(land_acc, col.a);
 		rough = mix(rough, 0.9, col.a);
 		if (k == selected) {
 			// Gewählter Kontinent: Messingrahmen um sein Fenster und Saum an der Küste.

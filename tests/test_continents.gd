@@ -269,3 +269,61 @@ func test_old_world_file_without_ids_loads() -> void:
 	if doc:
 		check((doc.continents[0]["id"] as String).length() > 4, "ID ergänzt")
 		check_equal(doc.continents[0]["scatter_seed"], 4242, "Streuung wie bisher")
+
+
+## Malt einen Strich Tupfer für Tupfer in einen fertigen Ausschnitt (wie beim Live-Malen).
+func _paint_live(doc: WorldDocument, id: String, stroke: Dictionary, cx: float, cy: float, size: float) -> TerrainWindow:
+	var sampler := TerrainSampler.new(doc.continent(id), doc.planet)
+	var w := sampler.window(cx, cy, size, RES)
+	var peak := PackedFloat32Array()
+	peak.resize(RES * RES)
+	peak.fill(0.0)
+	for d in Stroke.dab_count(stroke):
+		var partial := stroke.duplicate(true)
+		(partial["points"] as Array).resize((d + 1) * 2)
+		peak = sampler.apply_dabs(w, partial, d, peak)[1]
+	w.compose_all()
+	return w
+
+
+func test_live_painting_equals_recomputation() -> void:
+	for tool in ["land_add", "flatten"]:
+		var doc := _drawn_doc()
+		var id: String = doc.continents[0]["id"]
+		doc.execute(WorldDocument.add_stroke_command(id, Stroke.create_shape(true, _square(0.0, 0.0, 100000.0), 8000.0)))
+		if tool == "flatten":
+			var first := Stroke.create("flatten", 30000.0, 0.9)
+			first["level"] = 80.0
+			Stroke.add_point(first, 0.0, 0.0)
+			doc.execute(WorldDocument.add_stroke_command(id, first))
+		var s := Stroke.create(tool, 25000.0, 0.6)
+		if tool == "flatten":
+			s["level"] = 400.0
+		for k in 8:
+			Stroke.add_point(s, 60000.0 + k * 9000.0, 20000.0 - k * 6000.0)
+		var live := _paint_live(doc, id, s, 80000.0, 0.0, 200000.0)
+		doc.execute(WorldDocument.add_stroke_command(id, s))
+		var full := _window(doc, id, 80000.0, 0.0, 200000.0)
+		var worst := 0.0
+		for k in full.height.size():
+			worst = maxf(worst, absf(full.height[k] - live.height[k]))
+		check(worst < 0.01, "%s: live wie neu berechnet (größte Abweichung %.3f m)" % [tool, worst])
+
+
+func test_protect_keeps_older_generation() -> void:
+	var doc := _drawn_doc()
+	var id: String = doc.continents[0]["id"]
+	doc.execute(WorldDocument.add_stroke_command(id, Stroke.create_shape(true, _square(0.0, 0.0, 300000.0), 15000.0)))
+	var m := Stroke.create_generated("gen_mountains", 50000.0, 2000.0, 99)
+	Stroke.add_point(m, 0.0, 0.0)
+	doc.execute(WorldDocument.add_stroke_command(id, m))
+	var with_mountains := _window(doc, id, 0.0, 0.0, 200000.0)
+	var protect := Stroke.create_generated("protect", 60000.0, 1.0, 77)
+	Stroke.add_point(protect, 0.0, 0.0)
+	doc.execute(WorldDocument.add_stroke_command(id, protect))
+	var after := _window(doc, id, 0.0, 0.0, 200000.0)
+	check_near(after.height_at(0.0, 0.0), with_mountains.height_at(0.0, 0.0), 0.5, "Schutz danach: Gebirge bleibt")
+	var later := Stroke.create_generated("gen_mountains", 50000.0, 2000.0, 5)
+	Stroke.add_point(later, 0.0, 0.0)
+	doc.execute(WorldDocument.add_stroke_command(id, later))
+	check_near(_window(doc, id, 0.0, 0.0, 200000.0).height_at(0.0, 0.0), after.height_at(0.0, 0.0), 0.5, "Erzeugung danach: wirkt nicht im Schutz")

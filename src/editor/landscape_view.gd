@@ -8,19 +8,20 @@ extends Node3D
 
 signal stroke_finished(stroke: Dictionary)
 signal hover_changed(x: float, y: float, valid: bool)
+## Kurzer Hinweis für die Statuszeile (z. B. warum etwas nicht angelegt wurde).
+signal hint(text: String)
 
 const PLANE := 1000.0
 const SHADER := preload("res://src/editor/landscape.gdshader")
 const DETAIL_SHADER := preload("res://src/editor/landscape_detail.gdshader")
 const WATER_SHADER := preload("res://src/world/water.gdshader")
 const CLEAR_WATER_SHADER := preload("res://src/target/water_clear.gdshader")
-const FOLIAGE_SHADER := preload("res://src/style_test/foliage.gdshader")
 ## Bäume als einzelne Modelle erst ab diesem Ausschnitt (m) – darüber zeigt die Farbe den Wald.
-const TREES_BELOW := 3500.0
+const TREES_BELOW := 1700.0
 ## Ab hier Aussehen wie das Zielbild (Fototexturen, klares Wasser).
-const DETAIL_BELOW := 3600.0
+const DETAIL_BELOW := 4200.0
 ## Ab hier echte Bäume, Felsen, Büsche, Gras und Blumen im Zielstil.
-const DETAILED_TREES_BELOW := 450.0
+const DETAILED_TREES_BELOW := 620.0
 
 
 ## Überhöhung je Ausschnittgröße (nur Darstellung): 1 im Detail, bis 8 auf Kontinentebene.
@@ -72,8 +73,6 @@ var _mesh_res := 0
 var _stroke := {}
 var _peak := PackedFloat32Array()
 var _painting := false
-var _tree_meshes: Array = []
-var _blob_mesh: Mesh
 ## Linienwerkzeuge (Umriss, Fluss): gesammelte Punkte in Kontinentmetern und Vorschau.
 var _line := PackedVector2Array()
 var _drawing_line := false
@@ -96,6 +95,11 @@ func _ready() -> void:
 	for slot in maps:
 		var name: String = slot if slot.ends_with("normal") else slot + "_albedo"
 		_detail_material.set_shader_parameter(name, TargetMaterials.polyhaven(maps[slot][0], maps[slot][1]))
+	var broad := TargetMaterials.texture(TargetMaterials.T + "canopy_broadleaf.jpg")
+	var needles := TargetMaterials.texture(TargetMaterials.T + "canopy_conifer.jpg")
+	for m in [_coarse_material, _detail_material]:
+		m.set_shader_parameter("canopy_broadleaf", broad)
+		m.set_shader_parameter("canopy_conifer", needles)
 	_material = _coarse_material
 	_ground.material_override = _material
 
@@ -174,9 +178,11 @@ func show_window(w: TerrainWindow, p_sampler: TerrainSampler, regions: Array, pa
 	_ground.material_override = _material
 	_upload()
 	_material.set_shader_parameter("data_tex", _texture)
+	_material.set_shader_parameter("meadow_origin", Vector2(w.cx, -w.cy))
+	_material.set_shader_parameter("meadow_scale", units_per_m)
+	_material.set_shader_parameter("conifer_bias", 1.0 - smoothstep(1400.0, 2600.0, w.climate.get("treeline", 2500.0)))
 	if detail:
-		_detail_material.set_shader_parameter("meadow_origin", Vector2(w.cx, -w.cy))
-		_detail_material.set_shader_parameter("meadow_scale", units_per_m)
+		_detail_material.set_shader_parameter("canopy", 1.0 if w.size > TREES_BELOW else 0.0)
 		# Wasser in Darstellungseinheiten: Tiefen und Schluckweg auf Meter umrechnen.
 		_clear_water_material.set_shader_parameter("deep_depth", 7.0 * height_scale)
 		_clear_water_material.set_shader_parameter("absorption", Vector3(0.42, 0.11, 0.07) / height_scale)
@@ -385,6 +391,7 @@ func _place_lake(hit: Vector3) -> void:
 	var c := to_continent(hit)
 	var lake := make_lake(window, c, brush_radius_m)
 	if lake.is_empty():
+		hint.emit("Kein See angelegt: Das Ufer läge auf Meereshöhe – weiter landeinwärts setzen oder kleiner wählen.")
 		return
 	stroke_finished.emit(lake)
 
@@ -397,8 +404,8 @@ static func make_lake(w: TerrainWindow, c: Vector2, radius: float) -> Dictionary
 		rim = minf(rim, w.height_at(q.x, q.y))
 	var level := rim - 0.3
 	if level < 0.5:
-		# Am Meer: ein See auf Meereshöhe wäre Meer – trotzdem anlegen, knapp darüber.
-		level = maxf(w.height_at(c.x, c.y) - 0.5, 0.5)
+		# Das niedrigste Ufer liegt am Meer: Der Spiegel läge über dem Ufer und das Wasser schwebte.
+		return {}
 	var depth := clampf(radius * 0.04, 2.0, 80.0)
 	var lake := Stroke.create_lake(radius, level, depth)
 	Stroke.add_point(lake, c.x, c.y)
@@ -468,6 +475,11 @@ func _upload() -> void:
 		Vector3(PLANE, (high - low) * height_scale + 2.0, PLANE))
 
 
+## Umgebung neu zeigen (nach einer Bearbeitung, die über den Ausschnitt hinausreicht).
+func update_context(parent: TerrainWindow) -> void:
+	_show_context(parent)
+
+
 ## Gröberer Ausschnitt als Umgebung: gleiche Höhenskala wie der aktuelle, horizontal gestreckt,
 ## mit Loch, wo der aktuelle liegt. Grundstein für den späteren flüssigen Zoom.
 func _show_context(parent: TerrainWindow) -> void:
@@ -494,6 +506,11 @@ func _show_context(parent: TerrainWindow) -> void:
 	_context_material.set_shader_parameter("treeline", parent.climate["treeline"])
 	_context_material.set_shader_parameter("dryness", parent.climate["dryness"])
 	_context_material.set_shader_parameter("canopy", 1.0)
+	_context_material.set_shader_parameter("meadow_origin", Vector2(window.cx, -window.cy))
+	_context_material.set_shader_parameter("meadow_scale", units_per_m)
+	_context_material.set_shader_parameter("conifer_bias", 1.0 - smoothstep(1400.0, 2600.0, parent.climate.get("treeline", 2500.0)))
+	_context_material.set_shader_parameter("canopy_broadleaf", TargetMaterials.texture(TargetMaterials.T + "canopy_broadleaf.jpg"))
+	_context_material.set_shader_parameter("canopy_conifer", TargetMaterials.texture(TargetMaterials.T + "canopy_conifer.jpg"))
 	var half := PLANE * 0.5 - 0.5
 	_context_material.set_shader_parameter("hole", Vector4(-half, -half, half, half))
 	var high := 0.0
@@ -565,17 +582,17 @@ func _build_trees() -> void:
 	if window.size > TREES_BELOW:
 		return
 	var detailed := window.size <= DETAILED_TREES_BELOW
-	var spacing := 5.0 if detailed else (9.0 if window.size <= 2200.0 else 12.0)
-	var options := _tree_options(detailed)
+	var spacing := 5.0 if detailed else (9.0 if window.size <= 1000.0 else 12.0)
 	var seed_value: int = sampler.continent.get("scatter_seed", sampler.continent["seed"])
+	var treeline: float = window.climate.get("treeline", 2500.0)
+	# Kälteres Klima: mehr Nadelbäume (Hinweis aus dem Klima, kein Zwang).
+	var cold := 1.0 - smoothstep(1400.0, 2600.0, treeline)
 	var half := window.size * 0.5
 	var gx0 := int(floor((window.cx - half) / spacing))
 	var gx1 := int(ceil((window.cx + half) / spacing))
 	var gy0 := int(floor((window.cy - half) / spacing))
 	var gy1 := int(ceil((window.cy + half) / spacing))
-	var per_option: Array = []
-	for o in options.size():
-		per_option.append([])
+	var groups := {}
 	for gy in range(gy0, gy1 + 1):
 		for gx in range(gx0, gx1 + 1):
 			# Fest je Weltzelle: In jedem Ausschnitt steht derselbe Baum am selben Ort.
@@ -587,61 +604,60 @@ func _build_trees() -> void:
 			if f <= 0.02 or _hash01(gx, gy, seed_value, 3) > f * 0.9:
 				continue
 			var h := window.height_at(x, y)
-			if h < 1.0:
+			if h < 1.0 or window.water_level_at(x, y) > h:
 				continue
-			var pick := int(_hash01(gx, gy, seed_value, 5) * options.size()) % options.size()
-			var s: float
-			var sink: float
+			var conifer_share := clampf(0.12 + smoothstep(300.0, 1400.0, h) * 0.8 + cold * 0.5, 0.0, 0.95)
+			var conifer := _hash01(gx, gy, seed_value, 7) < conifer_share
+			var pick := _hash01(gx, gy, seed_value, 5)
+			var file: String
+			var variant := ""
+			var size := 1.0
 			if detailed:
-				# Zielbäume in echter Größe (10–12 m), leicht gestreut.
-				s = units_per_m * (0.85 + 0.35 * _hash01(gx, gy, seed_value, 4))
-				sink = 0.25 * units_per_m
+				if conifer:
+					file = TargetMaterials.TREES["spruce"][int(pick * 3.0) % 3]
+					size = 0.8 + 0.45 * _hash01(gx, gy, seed_value, 4)
+				elif f < 0.45 and pick < 0.45:
+					# Am Waldrand und in lockerem Bestand: junge Bäume.
+					file = TargetMaterials.TREES["young"][int(pick * 20.0) % 2]
+					size = 0.8 + 0.5 * _hash01(gx, gy, seed_value, 4)
+				else:
+					var broad: Array = TargetMaterials.TREES["oak"] + TargetMaterials.TREES["beech"]
+					file = broad[int(pick * broad.size()) % broad.size()]
+					size = 0.75 + 0.55 * _hash01(gx, gy, seed_value, 4)
+				variant = "deep" if _hash01(gx, gy, seed_value, 8) < 0.35 else ""
 			else:
-				s = (9.0 + 7.0 * _hash01(gx, gy, seed_value, 4)) * units_per_m
-				sink = 0.3 * s
-			var basis := Basis(Vector3.UP, _hash01(gx, gy, seed_value, 6) * TAU).scaled(Vector3(s, s, s))
-			var pos := Vector3((x - window.cx) * units_per_m, h * height_scale - sink, -(y - window.cy) * units_per_m)
-			per_option[pick].append(Transform3D(basis, pos))
-	for o in options.size():
-		var list: Array = per_option[o]
-		if list.is_empty():
+				file = (["spruce_3", "spruce_1"] if conifer else TargetMaterials.TREES["far"])[int(pick * 6.0) % (2 if conifer else 3)]
+				size = 0.8 + 0.5 * _hash01(gx, gy, seed_value, 4)
+			# Farbstreuung je Baum: Helligkeit und ein Hauch Gelb oder Blau.
+			var light := 0.84 + 0.26 * _hash01(gx, gy, seed_value, 9)
+			var warm := _hash01(gx, gy, seed_value, 10) - 0.5
+			var tint := Color(0.5 * light * (1.0 + warm * 0.14), 0.5 * light * (1.0 + warm * 0.05), 0.5 * light * (1.0 - warm * 0.16), 1.0)
+			var s := size * units_per_m
+			var basis := Basis(Vector3.UP, _hash01(gx, gy, seed_value, 6) * TAU).scaled(Vector3(s, s * (0.92 + 0.16 * pick), s))
+			var pos := Vector3((x - window.cx) * units_per_m, h * height_scale - 0.25 * units_per_m, -(y - window.cy) * units_per_m)
+			var key := file + "|" + variant
+			if not groups.has(key):
+				groups[key] = [[], []]
+			groups[key][0].append(Transform3D(basis, pos))
+			groups[key][1].append(tint)
+	for key in groups:
+		var parts: PackedStringArray = (key as String).split("|")
+		var mesh := TargetMaterials.tree_mesh(parts[0], parts[1])
+		if mesh == null:
 			continue
-		for part in options[o]:
-			var mm := MultiMesh.new()
-			mm.transform_format = MultiMesh.TRANSFORM_3D
-			mm.mesh = part[0]
-			mm.instance_count = list.size()
-			for i in list.size():
-				mm.set_instance_transform(i, (list[i] as Transform3D) * (part[1] as Transform3D))
-			var inst := MultiMeshInstance3D.new()
-			inst.multimesh = mm
-			_trees.add_child(inst)
-
-
-## Baumformen, je als Liste von [Netz, Lage], auf Höhe 1 gebracht (Skalierung = Baumhöhe).
-func _tree_options(detailed: bool) -> Array:
-	if not detailed:
-		if _blob_mesh == null:
-			var sphere := SphereMesh.new()
-			sphere.radius = 0.32
-			sphere.height = 0.55
-			sphere.radial_segments = 8
-			sphere.rings = 4
-			var m := ShaderMaterial.new()
-			m.shader = FOLIAGE_SHADER
-			m.set_shader_parameter("color_scale", Vector3(0.16, 0.30, 0.08))
-			m.set_shader_parameter("wind_strength", 0.0)
-			sphere.material = m
-			_blob_mesh = sphere
-		return [[[_blob_mesh, Transform3D(Basis(), Vector3(0.0, 0.62, 0.0))]]]
-	if _tree_meshes.is_empty():
-		# Zielbäume (Eiche häufiger), echte Größe in Metern.
-		for file in ["oak_1", "oak_2", "oak_3", "beech_1", "beech_2", "young_1", "oak_1"]:
-			var mesh := TargetMaterials.tree_mesh(file)
-			if mesh:
-				_tree_meshes.append([[mesh, Transform3D()]])
-	return _tree_meshes
-
+		var list: Array = groups[key][0]
+		var tints: Array = groups[key][1]
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_custom_data = true
+		mm.mesh = mesh
+		mm.instance_count = list.size()
+		for i in list.size():
+			mm.set_instance_transform(i, list[i])
+			mm.set_instance_custom_data(i, tints[i])
+		var inst := MultiMeshInstance3D.new()
+		inst.multimesh = mm
+		_trees.add_child(inst)
 
 # --- Beiwerk im feinsten Ausschnitt ----------------------------------------------------------
 

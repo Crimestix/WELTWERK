@@ -11,6 +11,8 @@ signal continent_opened(id: String)
 signal empty_clicked
 ## Verschieben läuft (vorläufig) bzw. ist beendet (endgültig, als ein Schritt).
 signal continent_dragged(id: String, latitude: float, longitude: float, final: bool)
+## Ziehen ohne gültiges Ziel beendet (nicht bewegt, neben der Kugel losgelassen): Vorschau verwerfen.
+signal continent_drag_cancelled(id: String)
 signal enter_continent
 
 const RADIUS := 300.0
@@ -18,6 +20,8 @@ const SHADER := preload("res://src/editor/globe.gdshader")
 ## Überhöhung des Reliefs auf dem Globus (nur Darstellung).
 const RELIEF_EXAGGERATION := 30.0
 const TEXTURE_RES := 129
+## Ebenen eines Texturfelds, die jede Grafikkarte kann (Kontinente darüber: Hinweis, siehe show_world).
+const MAX_LAYERS := 2048
 
 @onready var camera: Camera3D = $Camera3D
 
@@ -79,6 +83,12 @@ func show_world(continents: Array, planet: Dictionary, windows: Array) -> void:
 	var colors: Array[Image] = []
 	var datas: Array[Image] = []
 	var cache := {}
+	if windows.size() > MAX_LAYERS:
+		push_warning("Mehr als %d Kontinente: die übrigen werden auf dem Globus nicht gezeigt." % MAX_LAYERS)
+		windows = windows.slice(0, MAX_LAYERS)
+		continents = continents.slice(0, MAX_LAYERS)
+		_continents = continents
+		_windows = windows
 	for w in windows:
 		var pair: Array = _baked.get(w, [])
 		if pair.is_empty():
@@ -151,7 +161,7 @@ func screen_of(latitude: float, longitude: float) -> Vector2:
 
 ## Breite/Länge in der Bildmitte (für neue Kontinente).
 func view_center() -> Vector2:
-	return Vector2(rad_to_deg(_pitch), -rad_to_deg(_yaw))
+	return Vector2(rad_to_deg(_pitch), wrapf(-rad_to_deg(_yaw), -180.0, 180.0))
 
 
 ## Farbbild eines Kontinents; Alpha = Land (weich an der Küste).
@@ -232,6 +242,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					var hit := continent_at(ll) if ll != null else ""
 					if b.double_click and hit != "":
 						continent_opened.emit(hit)
+						# Derselbe Druck darf nicht in der jetzt geöffneten Landschaft malen.
+						get_viewport().set_input_as_handled()
 						return
 					if hit != "" and hit == selected_id:
 						var c: Dictionary = _continents[_ids.find(hit)]
@@ -243,8 +255,8 @@ func _unhandled_input(event: InputEvent) -> void:
 					var moved := b.position.distance_to(_press_position) > 4.0
 					if _dragging_continent:
 						_dragging_continent = false
-						if moved:
-							_emit_drag(b.position, true)
+						if not (moved and _emit_drag(b.position, true)):
+							continent_drag_cancelled.emit(selected_id)
 					elif not moved:
 						var ll: Variant = latlon_under(b.position)
 						var hit := continent_at(ll) if ll != null else ""
@@ -277,12 +289,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		_zoom(1.0 / maxf((event as InputEventMagnifyGesture).factor, 0.01))
 
 
-func _emit_drag(screen_position: Vector2, final: bool) -> void:
+## Gibt false zurück, wenn die Stelle neben der Kugel liegt (dann kein Signal).
+func _emit_drag(screen_position: Vector2, final: bool) -> bool:
 	var ll: Variant = latlon_under(screen_position)
 	if ll == null:
-		return
+		return false
 	var target: Vector2 = (ll as Vector2) + _drag_offset
 	continent_dragged.emit(selected_id, clampf(target.x, -80.0, 80.0), wrapf(target.y, -180.0, 180.0), final)
+	return true
 
 
 func _rotate(relative: Vector2) -> void:
@@ -301,6 +315,7 @@ func _zoom(factor: float) -> void:
 		if _limit_count >= 2:
 			_limit_count = 0
 			enter_continent.emit()
+			get_viewport().set_input_as_handled()
 		return
 	_target_distance = clampf(_target_distance * factor, 420.0, 1600.0)
 

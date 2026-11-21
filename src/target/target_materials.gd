@@ -13,6 +13,7 @@ const TREES := {
 	"beech": ["beech_1", "beech_2"],
 	"young": ["young_1", "young_2"],
 	"far": ["far_1", "far_2", "far_3"],
+	"spruce": ["spruce_1", "spruce_2", "spruce_3"],
 }
 const ROCKS := ["granite_hf", "granite_hf_2"]
 const BUSHES := ["bush_1", "bush_2", "bush_3"]
@@ -28,11 +29,22 @@ static func polyhaven(id: String, map: String) -> Texture2D:
 	return texture(PH + "%s/%s_%s.jpg" % [id, id, map])
 
 
-static func material_for(surface_name: String, bush: bool) -> Material:
+## variant: "" Standardlaub, "deep" dunkleres Laub (Linde/Hainbuche) für Farbvielfalt.
+static func material_for(surface_name: String, bush: bool, variant: String = "") -> Material:
+	if surface_name.begins_with("NeedleCards"):
+		var needles := ShaderMaterial.new()
+		needles.shader = LEAF_SHADER
+		needles.set_shader_parameter("leaf_atlas", texture(T + "needle_atlas.png"))
+		needles.set_shader_parameter("tint", Vector3(1.0, 1.08, 1.0))
+		needles.set_shader_parameter("backlight", 0.35)
+		needles.set_shader_parameter("alpha_cut", 0.38)
+		needles.set_shader_parameter("wind_strength", 0.015)
+		return needles
 	if surface_name.begins_with("LeafCards"):
 		var leaf := ShaderMaterial.new()
 		leaf.shader = LEAF_SHADER
-		var atlas := texture(T + ("shrub_leaf_atlas.png" if bush else "leaf_atlas_sunlit.png"))
+		var file := "shrub_leaf_atlas.png" if bush else ("leaf_atlas_deep.png" if variant == "deep" else "leaf_atlas_sunlit.png")
+		var atlas := texture(T + file)
 		leaf.set_shader_parameter("leaf_atlas", atlas if atlas else load("res://assets/style_c/leaf_atlas.png"))
 		leaf.set_shader_parameter("tint", Vector3(1.12, 1.16, 0.95) if not bush else Vector3(1.05, 1.15, 0.8))
 		leaf.set_shader_parameter("backlight", 0.75)
@@ -54,9 +66,10 @@ static func material_for(surface_name: String, bush: bool) -> Material:
 
 
 ## Netz eines Modells mit Materialien im Zielstil (einmal je Datei; Higgsfield-Modelle behalten ihre).
-static func mesh(path: String, bush: bool = false) -> Mesh:
-	if _cache.has(path):
-		return _cache[path]
+static func mesh(path: String, bush: bool = false, variant: String = "") -> Mesh:
+	var key := path + "|" + variant
+	if _cache.has(key):
+		return _cache[key]
 	var scene: PackedScene = load(path)
 	if scene == null:
 		return null
@@ -66,14 +79,14 @@ static func mesh(path: String, bush: bool = false) -> Mesh:
 	if not path.contains("_hf"):
 		for s in result.get_surface_count():
 			var original := result.surface_get_material(s)
-			result.surface_set_material(s, material_for(original.resource_name if original else "", bush))
+			result.surface_set_material(s, material_for(original.resource_name if original else "", bush, variant))
 	root.free()
-	_cache[path] = result
+	_cache[key] = result
 	return result
 
 
-static func tree_mesh(file: String) -> Mesh:
-	return mesh(T + "trees/" + file + ".glb")
+static func tree_mesh(file: String, variant: String = "") -> Mesh:
+	return mesh(T + "trees/" + file + ".glb", false, variant)
 
 
 static func rock_mesh(file: String) -> Mesh:

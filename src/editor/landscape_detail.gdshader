@@ -25,6 +25,11 @@ uniform sampler2D rock_normal : hint_normal, filter_linear_mipmap_anisotropic, r
 uniform sampler2D bottom_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D forest_albedo : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform vec3 forest_floor : source_color = vec3(0.20, 0.26, 0.10);
+// Ohne einzelne Bäume (Ausschnitte über 1,7 km): Wald als Kronendach-Luftbild wie im groben Shader.
+uniform float canopy = 0.0;
+uniform sampler2D canopy_broadleaf : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D canopy_conifer : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float conifer_bias = 0.0;
 uniform vec3 snow_color : source_color = vec3(0.93, 0.94, 0.96);
 
 varying vec3 world_pos;
@@ -97,7 +102,12 @@ void fragment() {
 
 	// Waldboden unter gemaltem Wald.
 	float f = smoothstep(0.2, 0.6, forest + (mixer - 0.5) * 0.2);
-	c = mix(c, forest_floor * (0.75 + 0.5 * texture(forest_albedo, xz / 4.0).g), f * 0.85);
+	vec3 floor_c = forest_floor * (0.75 + 0.5 * texture(forest_albedo, xz / 4.0).g);
+	float conifer = clamp(0.12 + smoothstep(300.0, 1400.0, h) * 0.8 + conifer_bias * 0.5, 0.0, 0.95);
+	vec3 broad = mix(texture(canopy_broadleaf, xz / 230.0).rgb, texture(canopy_broadleaf, xz.yx / 610.0 + 0.37).rgb, 0.35);
+	vec3 needles = mix(texture(canopy_conifer, xz / 190.0).rgb, texture(canopy_conifer, xz.yx / 530.0 + 0.61).rgb, 0.35);
+	vec3 crowns = mix(broad, needles, smoothstep(0.35, 0.65, conifer + (macro - 0.5) * 0.4));
+	c = mix(c, mix(floor_c, crowns, canopy), f * mix(0.85, 1.0, canopy));
 
 	float shore_w = (1.0 - smoothstep(0.9, 1.9 + macro * 0.6, h)) * step(-0.35, h);
 	float rock_w = clamp(smoothstep(0.35, 0.55, slope) + shore_w * smoothstep(0.35, 0.65, mixer + 0.2), 0.0, 1.0);

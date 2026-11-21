@@ -35,6 +35,8 @@ var forest_edit := PackedFloat32Array()
 ## Geschützter Anteil (0–1) und Ausgangswert, dessen Grundform dort gilt.
 var protect := PackedFloat32Array()
 var protect_seed := PackedInt64Array()
+## Schutz gegen Erzeugung, in der Reihenfolge der Strichliste aufgebaut.
+var gen_block := PackedFloat32Array()
 ## Ebene: Gewicht und Zielhöhe.
 var flat_weight := PackedFloat32Array()
 var flat_level := PackedFloat32Array()
@@ -66,6 +68,7 @@ func _init(p_cx: float, p_cy: float, p_size: float, p_res: int) -> void:
 	forest_edit.resize(n)
 	protect.resize(n)
 	protect_seed.resize(n)
+	gen_block.resize(n)
 	flat_weight.resize(n)
 	flat_level.resize(n)
 	water_bed.resize(n)
@@ -79,6 +82,7 @@ func _init(p_cx: float, p_cy: float, p_size: float, p_res: int) -> void:
 	forest_edit.fill(0.0)
 	protect.fill(0.0)
 	protect_seed.fill(0)
+	gen_block.fill(0.0)
 	flat_weight.fill(0.0)
 	flat_level.fill(0.0)
 	water_bed.fill(NO_BED)

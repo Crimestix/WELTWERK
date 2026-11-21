@@ -10,10 +10,17 @@ uniform vec3 meadow_mid : source_color = vec3(0.50, 0.63, 0.17);
 uniform vec3 meadow_deep : source_color = vec3(0.30, 0.46, 0.12);
 uniform vec3 meadow_dry : source_color = vec3(0.74, 0.62, 0.34);
 
+// Ganzzahlige Mischfunktion je Rasterzelle: gleich gut an jeder Stelle der Welt (eine Kommazahl-
+// Mischung verliert bei Koordinaten über einigen zehn Kilometern Genauigkeit und zeigt Streifen).
 float m_hash12(vec2 p) {
-	vec3 p3 = fract(vec3(p.xyx) * 0.1031);
-	p3 += dot(p3, p3.yzx + 33.33);
-	return fract((p3.x + p3.y) * p3.z);
+	uvec2 q = uvec2(ivec2(floor(p)));
+	uint h = q.x * 1597334677u ^ q.y * 3812015801u;
+	h ^= h >> 16u;
+	h *= 2246822519u;
+	h ^= h >> 13u;
+	h *= 3266489917u;
+	h ^= h >> 16u;
+	return float(h >> 8u) / 16777216.0;
 }
 
 float m_noise(vec2 p) {

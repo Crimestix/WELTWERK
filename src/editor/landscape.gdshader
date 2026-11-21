@@ -6,6 +6,9 @@
 shader_type spatial;
 render_mode cull_back, diffuse_burley, specular_schlick_ggx;
 
+// Gemeinsame Wiesenpalette und Umrechnung in Meter (meadow_origin, meadow_scale).
+#include "res://src/target/meadow.gdshaderinc"
+
 uniform sampler2D data_tex : filter_nearest, repeat_disable;
 uniform sampler2D data_lin : filter_linear, repeat_disable;
 uniform int res = 257;
@@ -24,9 +27,6 @@ uniform vec3 brush_color : source_color = vec3(0.88, 0.70, 0.38);
 uniform bool is_context = false;
 uniform vec4 hole = vec4(0.0);
 
-uniform vec3 meadow_color : source_color = vec3(0.36, 0.47, 0.13);
-uniform vec3 meadow_dark_color : source_color = vec3(0.15, 0.29, 0.07);
-uniform vec3 dry_color : source_color = vec3(0.64, 0.56, 0.26);
 uniform vec3 highland_color : source_color = vec3(0.50, 0.46, 0.30);
 uniform vec3 forest_color : source_color = vec3(0.07, 0.17, 0.05);
 uniform vec3 forest_floor_color : source_color = vec3(0.20, 0.17, 0.10);
@@ -34,6 +34,10 @@ uniform vec3 rock_color : source_color = vec3(0.52, 0.49, 0.45);
 uniform vec3 rock_dark_color : source_color = vec3(0.27, 0.25, 0.23);
 uniform vec3 sand_color : source_color = vec3(0.80, 0.72, 0.52);
 uniform vec3 snow_color : source_color = vec3(0.93, 0.94, 0.96);
+// Kronendach als Luftbild (in Metern gekachelt; aus der Ferne mittelt die Mipmap zur Waldfarbe).
+uniform sampler2D canopy_broadleaf : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform sampler2D canopy_conifer : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float conifer_bias = 0.0;   // kälteres Klima: mehr Nadelwald
 uniform vec3 lake_shallow : source_color = vec3(0.16, 0.46, 0.50);
 uniform vec3 lake_deep : source_color = vec3(0.05, 0.19, 0.33);
 
@@ -101,7 +105,9 @@ void fragment() {
 	if (is_context && xz.x > hole.x && xz.x < hole.z && xz.y > hole.y && xz.y < hole.w) {
 		discard;
 	}
-	vec4 dl = texture(data_lin, uv_v);
+	// Gitterpunkt i liegt bei uv = i/(res-1); die Textur hat Texelmitten bei (i+0,5)/res.
+	vec2 tuv = (uv_v * float(res - 1) + 0.5) / float(res);
+	vec4 dl = texture(data_lin, tuv);
 	float height_f = dl.r;
 	float forest_f = dl.g;
 	float water_f = dl.a;
@@ -111,14 +117,30 @@ void fragment() {
 	float detail = fbm(xz * 0.25);
 	float micro = value_noise(xz * 2.0);
 
-	vec3 grass = mix(meadow_dark_color, meadow_color, smoothstep(0.3, 0.7, macro));
-	grass = mix(grass, dry_color, clamp(smoothstep(0.5, 0.8, fbm(xz * 0.004 + 31.0)) * 0.5 + dryness - 0.45, 0.0, 0.7));
+	vec2 m = to_meters(xz);
+	float px_m = max(length(fwidth(m)), 0.001);
+	// Variation in Wellen fester Länge (40 m … 41 km): dieselbe Welt in jedem Maßstab; zu feine
+	// Wellen werden ausgeblendet statt zu flimmern.
+	float vary = 0.0;
+	float lam = 40.0;
+	for (int o = 0; o < 6; o++) {
+		float fade = 1.0 - smoothstep(0.15, 0.6, px_m / lam);
+		vary += (m_noise(m / lam + float(o) * 13.7) - 0.5) * fade * (0.55 + 0.1 * float(o));
+		lam *= 4.0;
+	}
+	vec3 grass = mix(meadow_mid, meadow_light, clamp(0.5 + vary * 1.3, 0.0, 1.0));
+	grass = mix(meadow_deep, grass, clamp(0.75 + vary * 1.2, 0.0, 1.0));
+	float dry_v = m_noise(m / 9000.0 + 31.0) * 0.6 + m_noise(m / 2200.0 + 5.0) * 0.4 * (1.0 - smoothstep(0.15, 0.6, px_m / 2200.0));
+	grass = mix(grass, meadow_dry, clamp(smoothstep(0.5, 0.8, dry_v) * 0.5 + dryness - 0.45, 0.0, 0.7));
 	// Höhenstufen: Hochland bräunlicher, damit Ebenen und Bergland auseinanderzuhalten sind.
 	grass = mix(grass, highland_color, smoothstep(500.0, 1800.0, height_f) * 0.55);
 	grass *= 0.85 + 0.28 * detail;
 
 	float f = smoothstep(0.2, 0.5, forest_f + (detail - 0.5) * 0.4 + (macro - 0.5) * 0.15);
-	vec3 trees = forest_color * (0.7 + 0.9 * value_noise(xz * 1.3) * detail);
+	float conifer = clamp(0.12 + smoothstep(300.0, 1400.0, height_f) * 0.8 + conifer_bias * 0.5, 0.0, 0.95);
+	vec3 broad = mix(texture(canopy_broadleaf, m / 230.0).rgb, texture(canopy_broadleaf, m.yx / 610.0 + 0.37).rgb, 0.35);
+	vec3 needles = mix(texture(canopy_conifer, m / 190.0).rgb, texture(canopy_conifer, m.yx / 530.0 + 0.61).rgb, 0.35);
+	vec3 trees = mix(broad, needles, smoothstep(0.35, 0.65, conifer + (vary * 0.6))) * (0.92 + vary * 0.35);
 	vec3 ground = mix(grass, mix(forest_floor_color, trees, canopy), f);
 
 	vec3 rock = mix(rock_dark_color, rock_color, smoothstep(0.25, 0.75, detail)) * (0.9 + 0.2 * micro);
@@ -136,13 +158,13 @@ void fragment() {
 	c = mix(c, vec3(0.05, 0.2, 0.22), underwater * 0.7);
 
 	// Schummerung aus der linear gefilterten Höhe (feiner als die Gitterpunkte).
-	float du = 1.0 / float(res - 1);
+	float du = 1.0 / float(res);
 	float cell_r = plane_size / float(res - 1);
 	float k = height_scale * shade_exaggeration;
-	float hl = max(texture(data_lin, uv_v + vec2(-du, 0.0)).r, 0.0);
-	float hr = max(texture(data_lin, uv_v + vec2(du, 0.0)).r, 0.0);
-	float hn = max(texture(data_lin, uv_v + vec2(0.0, -du)).r, 0.0);
-	float hs = max(texture(data_lin, uv_v + vec2(0.0, du)).r, 0.0);
+	float hl = max(texture(data_lin, tuv + vec2(-du, 0.0)).r, 0.0);
+	float hr = max(texture(data_lin, tuv + vec2(du, 0.0)).r, 0.0);
+	float hn = max(texture(data_lin, tuv + vec2(0.0, -du)).r, 0.0);
+	float hs = max(texture(data_lin, tuv + vec2(0.0, du)).r, 0.0);
 	vec3 ns = normalize(vec3((hl - hr) * k, 2.0 * cell_r, (hn - hs) * k));
 	vec3 light = normalize(vec3(-0.65, 0.9, -0.75));
 	float shade = clamp(dot(ns, light) / light.y, 0.3, 1.25);

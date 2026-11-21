@@ -193,6 +193,84 @@ def make_tree(species, index, seed):
     report.append(f"{name}: {tris} Dreiecke, Höhe {hi.z + p['cluster']:.1f} m, {os.path.getsize(path) / 1024:.0f} KB")
 
 
+def make_conifer(index, seed, height):
+    """Nadelbaum: gerader Stamm, Astquirle, unten lang und hängend, oben kurz; an jedem Ast
+    mehrere flache Nadelzweig-Karten (Nadelatlas 2 × 2), Material "NeedleCards"."""
+    clear_scene()
+    rng = random.Random(seed)
+    name = f"spruce_{index}"
+    mesh = bpy.data.meshes.new(name)
+    bpy.context.scene.collection.objects.link(bpy.data.objects.new(name, mesh))
+    bm = bmesh.new()
+    col = bm.loops.layers.color.new("Col")
+    uv = bm.loops.layers.uv.new("UVMap")
+    lean = Vector((rng.uniform(-0.04, 0.04), rng.uniform(-0.04, 0.04), 1.0)).normalized()
+    add_tube(bm, col, uv, Vector((0, 0, -0.4)), lean * height, 0.32 + height * 0.006, 0.04, 8, 6, (1, 1, 1, 1), rng)
+    base = rng.uniform(1.6, 2.6)
+    max_len = height * rng.uniform(0.2, 0.24)
+    normals = []
+    z = base
+    while z < height - 0.3:
+        t = (z - base) / (height - base)
+        length = max(0.35, max_len * (1.0 - t) ** 0.85)
+        count = rng.randint(5, 7)
+        phase = rng.uniform(0, 2 * math.pi)
+        for k in range(count):
+            a = phase + 2 * math.pi * (k + rng.uniform(-0.25, 0.25)) / count
+            droop = math.radians(rng.uniform(8, 26) * (1.0 - t * 0.7))
+            out = Vector((math.cos(a), math.sin(a), 0.0))
+            direction = (out * math.cos(droop) - UP * math.sin(droop)).normalized()
+            origin = lean * z
+            tip = add_tube(bm, col, uv, origin, origin + direction * length, 0.05 * (1.0 - t) + 0.015, 0.01,
+                           3, 1, (1, 1, 1, 1), rng, gravity=0.06)
+            side = direction.cross(UP).normalized()
+            for c in range(3 if length > 0.8 else 2):
+                along = direction.copy()
+                along.rotate(Matrix.Rotation(rng.uniform(-0.25, 0.25), 3, UP))
+                along = (along + UP * rng.uniform(0.0, 0.18)).normalized()
+                roll = rng.uniform(-0.45, 0.45)
+                across = side.copy()
+                across.rotate(Matrix.Rotation(roll, 3, along))
+                s = min(length * rng.uniform(0.85, 1.05), 2.6)
+                start = origin + direction * length * rng.uniform(0.0, 0.25)
+                w = s * rng.uniform(0.6, 0.8)
+                verts = [bm.verts.new(start + across * (a2 * w * 0.5) + along * (b2 * s))
+                         for a2, b2 in ((-1, 0), (1, 0), (1, 1), (-1, 1))]
+                f = bm.faces.new(verts)
+                f.material_index = 1
+                u0, v0 = QUADRANTS[rng.randrange(4)]
+                shade = 0.62 + 0.42 * t + rng.uniform(-0.06, 0.06)
+                tint = rng.uniform(-0.05, 0.05)
+                for loop, (a3, b3) in zip(f.loops, ((0, 0), (1, 0), (1, 1), (0, 1))):
+                    loop[uv].uv = (u0 + a3 * 0.5, v0 + b3 * 0.5)
+                    loop[col] = (shade + tint, shade + tint * 0.5, shade, 1.0)
+                    vp = loop.vert.co
+                    cone = Vector((vp.x, vp.y, 0.0))
+                    cone = (cone.normalized() if cone.length > 0.01 else Vector((0, 0, 0))) * 0.6
+                    normals.append((cone + UP * 0.8).normalized())
+        z += rng.uniform(0.45, 0.65)
+    bm.to_mesh(mesh)
+    bm.free()
+    for mat_name in ("Bark", "NeedleCards"):
+        mesh.materials.append(bpy.data.materials.get(mat_name) or bpy.data.materials.new(mat_name))
+    custom = []
+    it = iter(normals)
+    for poly in mesh.polygons:
+        poly.use_smooth = True
+        for _ in poly.loop_indices:
+            custom.append(next(it) if poly.material_index == 1 else None)
+    mesh.update()
+    computed = [l.normal.copy() for l in mesh.loops]
+    mesh.normals_split_custom_set([c if c is not None else computed[i] for i, c in enumerate(custom)])
+    attrs = mesh.color_attributes
+    attrs.active_color_name = attrs[0].name
+    attrs.render_color_index = 0
+    tris = sum(len(poly.vertices) - 2 for poly in mesh.polygons)
+    path = os.path.join(OUT, "trees", f"{name}.glb")
+    export(path)
+    report.append(f"{name}: {tris} Dreiecke, Höhe {height:.1f} m, {os.path.getsize(path) / 1024:.0f} KB")
+
+
 def make_bush(index, seed):
     clear_scene()
     rng = random.Random(seed)
@@ -268,6 +346,8 @@ for i, seed in enumerate((1301, 1302), start=1):
     make_tree("young", i, seed)
 for i, seed in enumerate((1351, 1352, 1353), start=1):
     make_tree("far", i, seed)
+for i, (seed, h) in enumerate(((1451, 17.0), (1452, 21.0), (1453, 13.5)), start=1):
+    make_conifer(i, seed, h)
 for i, seed in enumerate((1401, 1402, 1403), start=1):
     make_bush(i, seed)
 make_rock("ledge_1", 1501, Vector((6.5, 3.8, 2.6)), 12, 0.55, 0.72, 1.5)

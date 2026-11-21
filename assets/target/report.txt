@@ -8,6 +8,9 @@ young_2: 1168 Dreiecke, Höhe 6.4 m, 79 KB
 far_1: 1480 Dreiecke, Höhe 10.7 m, 97 KB
 far_2: 906 Dreiecke, Höhe 12.0 m, 59 KB
 far_3: 1094 Dreiecke, Höhe 10.9 m, 71 KB
+spruce_1: 2042 Dreiecke, Höhe 17.0 m, 143 KB
+spruce_2: 2626 Dreiecke, Höhe 21.0 m, 184 KB
+spruce_3: 1666 Dreiecke, Höhe 13.5 m, 116 KB
 bush_1: 240 Dreiecke
 bush_2: 150 Dreiecke
 bush_3: 210 Dreiecke
@@ -17,4 +20,4 @@ ledge_3: 2700 Dreiecke
 boulder_1: 768 Dreiecke
 boulder_2: 768 Dreiecke
 stone_1: 300 Dreiecke
-Dauer: 2.8 s
+Dauer: 3.0 s

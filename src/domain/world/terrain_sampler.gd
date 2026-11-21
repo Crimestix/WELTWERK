@@ -71,12 +71,17 @@ func window(cx: float, cy: float, size: float, res: int = 257) -> TerrainWindow:
 	w.extent_half = continent["size_km"] * 500.0
 	_peak.resize(res * res)
 	_peak.fill(0.0)
+	# Schutz wirkt zweifach: Für die Grundform gilt jeder Schutz (er hält die damalige Variante fest),
+	# gegen Erzeugung aber erst ab seiner Stelle in der Strichliste – ältere Erzeugung bleibt.
 	for stroke in continent["strokes"]:
 		if stroke["tool"] == "protect" and touches(w, stroke):
 			apply_stroke(w, stroke)
+	var block := w.gen_block
+	block.fill(0.0)
+	w.gen_block = block
 	evaluate_base(w)
 	for stroke in continent["strokes"]:
-		if stroke["tool"] != "protect" and touches(w, stroke):
+		if touches(w, stroke):
 			apply_stroke(w, stroke)
 	w.compose_all()
 	return w
@@ -341,9 +346,14 @@ func apply_dabs(w: TerrainWindow, stroke: Dictionary, first_dab: int, peak: Pack
 		"protect": layer = w.protect
 		_: layer = w.forest_edit
 	var marks := w.edit_marks
-	var protect := w.protect
+	var block := w.gen_block
 	var levels := w.flat_level
 	var seeds := w.protect_seed
+	var land_tool := tool in ["land_add", "land_remove", "water", "gen_islands"]
+	if land_tool:
+		# Vorher begrenzen: dann ergeben Teilaufrufe (Live-Malen) und ein Aufruf dasselbe.
+		clamp_land(w, changed)
+		layer = w.land_edit
 	var level: float = stroke.get("level", 0.0)
 	var seed_value: int = int(stroke.get("seed", continent["seed"]))
 	for j in range(changed.position.y, changed.end.y):
@@ -358,21 +368,26 @@ func apply_dabs(w: TerrainWindow, stroke: Dictionary, first_dab: int, peak: Pack
 			var f := fmax[c]
 			if f <= peak[k]:
 				continue
-			var delta := f - peak[k]
+			var before := peak[k]
+			var delta := f - before
 			peak[k] = f
 			match tool:
 				"protect":
+					# Ausgangswert nur übernehmen, wo dieser Schutz der stärkere ist.
+					if f >= layer[k]:
+						seeds[k] = seed_value
 					layer[k] = maxf(layer[k], f)
-					seeds[k] = seed_value
+					block[k] = maxf(block[k], f)
 				"flatten":
 					if layer[k] < 0.01:
 						levels[k] = level
 					else:
-						levels[k] = lerpf(levels[k], level, delta)
+						# Gleich in Teilen wie in einem Zug: ergibt lerp(Ausgang, Ziel, stärkste Wirkung).
+						levels[k] = lerpf(levels[k], level, delta / maxf(1.0 - before, 1e-6))
 					layer[k] = clampf(layer[k] + amount * delta, 0.0, 1.0)
 				_:
 					if generator:
-						layer[k] += amount * delta * grow[c] * (1.0 - protect[k])
+						layer[k] += amount * delta * grow[c] * (1.0 - block[k])
 					else:
 						layer[k] += amount * delta
 
@@ -388,6 +403,7 @@ func apply_dabs(w: TerrainWindow, stroke: Dictionary, first_dab: int, peak: Pack
 		"protect":
 			w.protect = layer
 			w.protect_seed = seeds
+			w.gen_block = block
 		_: w.forest_edit = layer
 	w.edit_marks = marks
 	return [changed, peak]

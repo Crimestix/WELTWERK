@@ -386,6 +386,14 @@ func set_brush(fraction: float, strength: float) -> void:
 	_emit_brush()
 
 
+## Offene Eingabe im Namensfeld übernehmen (vor jedem Wechsel des Kontinents aufrufen,
+## damit der Name beim richtigen Kontinent landet).
+func commit_name() -> void:
+	if _name_edit.has_focus():
+		name_changed.emit(_name_edit.text)
+		_name_edit.release_focus()
+
+
 func set_reroll_available(on: bool) -> void:
 	_reroll.disabled = not on
 
