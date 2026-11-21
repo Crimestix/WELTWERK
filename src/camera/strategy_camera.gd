@@ -20,6 +20,10 @@ extends Node3D
 @export var near_pitch_degrees: float = -1.0
 ## Himmelsrichtung, aus der die Kamera schaut, in Grad (fest; 0 = von Süden).
 @export_range(-180.0, 180.0) var yaw_degrees: float = 0.0
+## Bildwinkel (senkrecht, Grad) ganz nah und ganz fern: Fern schmaler wie eine Landkarte (wenig
+## Verzerrung zwischen Vorder- und Hintergrund), nah weiter wie im Aufbauspiel. < 0: fest.
+@export var near_fov_degrees: float = -1.0
+@export var far_fov_degrees: float = -1.0
 @export var min_distance: float = 8.0
 @export var max_distance: float = 520.0
 @export var start_distance: float = 260.0
@@ -153,10 +157,12 @@ func _apply() -> void:
 	camera.global_position = eye
 	camera.look_at(position, Vector3.UP)
 
+	if near_fov_degrees > 0.0 and far_fov_degrees > 0.0:
+		camera.fov = lerpf(near_fov_degrees, far_fov_degrees, _zoom_t())
 	camera.near = clampf(_distance * 0.005, 0.05, 1.0)
 	camera.far = maxf(4000.0, _distance * 10.0)
 	if sun:
-		sun.directional_shadow_max_distance = clampf(_distance * 2.5, 60.0, 900.0)
+		sun.directional_shadow_max_distance = clampf(_distance * 2.5, 60.0, 6000.0)
 
 
 ## Zoomt so, dass der Punkt unter dem Mauszeiger an seiner Stelle bleibt.
@@ -224,8 +230,12 @@ func _visible_height() -> float:
 func current_pitch() -> float:
 	if near_pitch_degrees < 0.0:
 		return pitch_degrees
-	var t := smoothstep(min_distance, lerpf(min_distance, max_distance, 0.6), _distance)
-	return lerpf(near_pitch_degrees, pitch_degrees, t)
+	return lerpf(near_pitch_degrees, pitch_degrees, _zoom_t())
+
+
+## 0 ganz nah … 1 fern (für Neigung und Bildwinkel).
+func _zoom_t() -> float:
+	return smoothstep(min_distance, lerpf(min_distance, max_distance, 0.6), _distance)
 
 
 func _view_direction() -> Vector3:

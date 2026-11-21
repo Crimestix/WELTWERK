@@ -7,7 +7,8 @@ extends Node3D
 ##
 ## Aufruf-Schalter (nach `--`): --welt=<Pfad> eigene Weltdatei · --neu neue, leere Welt (ohne
 ## --welt in einer eigenen Testdatei, nie in der Hauptwelt) · --demo=<Ordner> Ablauf vorführen ·
-## --abnahme=<Ordner> Abnahmeablauf (Schritt über --schritt=1|2) · --screenshot=<Pfad>.
+## --abnahme=<Ordner> Abnahmeablauf (Schritt über --schritt=1|2) · --vergleich=<Ordner> Vergleich mit
+## der Kontinentalreferenz (ComparisonRun) · --screenshot=<Pfad>.
 
 const DEFAULT_PATH := "user://welt.json"
 const FACTOR := 8.0
@@ -42,6 +43,8 @@ var _notice := ""
 var _confirm: ConfirmationDialog
 ## Ungespeicherte Änderungen vorhanden.
 var _dirty := false
+## Laufender Vergleich mit der Referenz (hält das Objekt am Leben, solange es wartet).
+var _comparison: ComparisonRun
 
 
 func _ready() -> void:
@@ -56,11 +59,14 @@ func _ready() -> void:
 	if _args.has("abnahme"):
 		save_path = _args["abnahme"].path_join("welt.json")
 		DirAccess.make_dir_recursive_absolute(_args["abnahme"])
+	if _args.has("vergleich"):
+		save_path = _args["vergleich"].path_join("welt.json")
+		DirAccess.make_dir_recursive_absolute(_args["vergleich"])
 	if _args.has("neu") and not _args.has("welt") and not _args.has("demo") and not _args.has("abnahme"):
 		# Eine neue Welt zum Ausprobieren berührt nie die Hauptwelt.
 		save_path = "user://welt_neu.json"
 	save_path = _args.get("welt", save_path)
-	var fresh: bool = _args.has("neu") or (_args.has("abnahme") and _args.get("schritt", "1") == "1")
+	var fresh: bool = _args.has("neu") or _args.has("vergleich") or (_args.has("abnahme") and _args.get("schritt", "1") == "1")
 
 	doc = null if fresh else WorldDocument.load_file(save_path)
 	if WorldDocument.load_problem != "":
@@ -141,7 +147,10 @@ func _ready() -> void:
 		pass
 	else:
 		open_globe()
-	if _args.has("stufen"):
+	if _args.has("vergleich"):
+		_comparison = ComparisonRun.new(self)
+		_comparison.run(_args["vergleich"])
+	elif _args.has("stufen"):
 		_run_levels(_args["stufen"])
 	elif _args.has("abnahme"):
 		_run_acceptance(_args["abnahme"], _args.get("schritt", "1"))
