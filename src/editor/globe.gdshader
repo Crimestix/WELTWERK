@@ -14,10 +14,11 @@ uniform int selected = -1;
 uniform float planet_radius_m = 6371000.0;
 uniform float relief_scale = 0.0;
 
-uniform vec3 deep_color : source_color = vec3(0.03, 0.12, 0.25);
+uniform vec3 deep_color : source_color = vec3(0.05, 0.19, 0.36);
 uniform vec3 shallow_color : source_color = vec3(0.10, 0.42, 0.48);
 uniform vec3 line_color : source_color = vec3(0.85, 0.80, 0.65);
 uniform vec3 outline_color : source_color = vec3(0.95, 0.76, 0.40);
+uniform vec3 air_color : source_color = vec3(0.45, 0.66, 0.95);
 
 varying vec3 model_dir;
 
@@ -93,5 +94,8 @@ void fragment() {
 	c = mix(c, line_color, max(equator * 0.8, grid * 0.45));
 	ALBEDO = c;
 	ROUGHNESS = rough;
-	SPECULAR = 0.2;
+	SPECULAR = 0.35;
+	// Atmosphäre: heller Saum zum Rand hin.
+	float rim = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
+	EMISSION = air_color * rim * 0.55;
 }

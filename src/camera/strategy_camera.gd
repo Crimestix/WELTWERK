@@ -65,6 +65,18 @@ func reset_view() -> void:
 	_target_distance = clampf(start_distance, min_distance, max_distance)
 
 
+## Blickpunkt (Darstellungskoordinaten), auf den die Kamera zusteuert.
+func focus_point() -> Vector3:
+	return _target_focus
+
+
+## Blickpunkt verschieben, ohne Übergang (z. B. wenn der Ausschnitt mitwandert).
+func shift_focus(delta: Vector3) -> void:
+	_target_focus += delta
+	_focus += delta
+	_apply()
+
+
 ## Springt ohne Übergang zu einem Blickpunkt und Abstand.
 func jump_to(focus: Vector3, distance: float) -> void:
 	_target_focus = _clamp_to_world(focus)

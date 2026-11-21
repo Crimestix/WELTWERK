@@ -322,7 +322,7 @@ func zoom_out() -> void:
 
 ## Den aktuellen Ausschnitt an eine andere Stelle des Kontinents verlegen (gleiche Größe).
 ## Nachbarbereiche sind dieselbe Auswertung – die Übergänge passen ohne Naht.
-func move_level_to(x: float, y: float) -> void:
+func move_level_to(x: float, y: float, remember: bool = true) -> void:
 	if levels.size() <= 1:
 		camera_rig.jump_to(landscape.to_render(x, y), camera_rig.min_distance * 2.0)
 		return
@@ -332,10 +332,33 @@ func move_level_to(x: float, y: float) -> void:
 	level["cx"] = clampf(snappedf(x, cell), -half, half)
 	level["cy"] = clampf(snappedf(y, cell), -half, half)
 	level["window"] = null
-	doc.remember_region(active_id, level["cx"], level["cy"], level["size"])
+	if remember:
+		doc.remember_region(active_id, level["cx"], level["cy"], level["size"])
 	_show_level()
-	camera_rig.jump_to(Vector3.ZERO, camera_rig.max_distance * 0.6)
+	if remember:
+		camera_rig.jump_to(Vector3.ZERO, camera_rig.max_distance * 0.6)
 	_queue_view()
+
+
+## Mitführen: Nähert sich der Blickpunkt dem Rand eines feineren Ausschnitts, wandert der Ausschnitt
+## mit. Die Stelle unter dem Blickpunkt bleibt dabei an ihrem Platz im Bild.
+func _process(_delta: float) -> void:
+	if in_globe or levels.size() <= 1 or landscape.is_busy() or landscape.window == null:
+		return
+	var f := camera_rig.focus_point()
+	var limit := LandscapeView.PLANE * 0.34
+	if absf(f.x) < limit and absf(f.z) < limit:
+		return
+	var p := landscape.to_continent(f)
+	var level: Dictionary = levels.back()
+	var half: float = continent()["size_km"] * 500.0
+	var target := Vector2(clampf(p.x, -half, half), clampf(p.y, -half, half))
+	# Am Kontinentrand bewegt sich der Ausschnitt nicht weiter – dann nicht jedes Bild neu rechnen.
+	if target.distance_to(Vector2(level["cx"], level["cy"])) < level["size"] * 0.1:
+		return
+	move_level_to(target.x, target.y, false)
+	var now := landscape.to_render(p.x, p.y)
+	camera_rig.shift_focus(Vector3(now.x - f.x, 0.0, now.z - f.z))
 
 
 func _level_window(index: int) -> TerrainWindow:
@@ -1213,14 +1236,11 @@ func _run_levels(dir: String) -> void:
 	for level in 5:
 		if level > 0:
 			deepen_at(landscape.to_render(target.x, target.y))
-			# Küste im neuen, feineren Ausschnitt genauer suchen und knapp landeinwärts zielen.
+			# Küste im neuen, feineren Ausschnitt genauer suchen: der Mitte nächste Uferstelle.
 			var w: TerrainWindow = levels.back()["window"]
-			var from := Vector2(w.cx, w.cy) - direction * w.size * 0.45
-			for s in 300:
-				var q := from + direction * (w.size * 0.9 * s / 300.0)
-				if w.height_at(q.x, q.y) < -0.5:
-					target = q - direction * w.size * 0.12
-					break
+			var shore: Variant = _nearest_shore(w)
+			if shore != null:
+				target = shore
 		var size: float = levels.back()["size"]
 		camera_rig.jump_to(landscape.to_render(target.x, target.y).lerp(Vector3.ZERO, 0.5), camera_rig.max_distance * 0.55)
 		await _frames(25)
@@ -1232,6 +1252,28 @@ func _run_levels(dir: String) -> void:
 	var file := FileAccess.open(dir.path_join("messwerte.json"), FileAccess.WRITE)
 	file.store_string(JSON.stringify(results, "  "))
 	get_tree().quit()
+
+
+## Uferstelle (Land neben Meer oder See) nächst der Mitte eines Ausschnitts, oder null.
+static func _nearest_shore(w: TerrainWindow) -> Variant:
+	var best: Variant = null
+	var best_d := INF
+	var step := w.size / 96.0
+	for j in 97:
+		for i in 97:
+			var p := Vector2(w.cx - w.size * 0.5 + i * step, w.cy - w.size * 0.5 + j * step)
+			if w.height_at(p.x, p.y) <= 0.3:
+				continue
+			var wet := false
+			for d in [Vector2(step, 0.0), Vector2(-step, 0.0), Vector2(0.0, step), Vector2(0.0, -step)]:
+				var q: Vector2 = p + d
+				if w.contains(q.x, q.y) and (w.height_at(q.x, q.y) < -0.3 or w.water_level_at(q.x, q.y) > w.height_at(q.x, q.y)):
+					wet = true
+			var dist := p.distance_to(Vector2(w.cx, w.cy))
+			if wet and dist < best_d:
+				best_d = dist
+				best = p
+	return best
 
 
 ## Gleicher Inhalt? Zahlen auf 10⁻⁶ relativ gleich (ganz- und Kommazahlen gelten als gleich).
@@ -1346,8 +1388,15 @@ func _send_motion(position: Vector2) -> void:
 	Input.parse_input_event(e)
 
 
+## Feinster verfügbarer Ausschnitt des ganzen Kontinents (für die Suche nach Küste und Land).
+func _whole_continent_window() -> TerrainWindow:
+	if not levels.is_empty() and not in_globe:
+		return _level_window(0)
+	return globe_window(active_id)
+
+
 func _find_coast(direction: Vector2, half: float) -> Vector2:
-	var w := globe_window(active_id)
+	var w := _whole_continent_window()
 	# Von außen nach innen: der erste Landpunkt ist die Küste (Seen im Inneren zählen nicht).
 	var d := direction.normalized()
 	for s in 200:
@@ -1358,7 +1407,7 @@ func _find_coast(direction: Vector2, half: float) -> Vector2:
 
 
 func _find_land(max_height: float) -> Vector2:
-	var w := globe_window(active_id)
+	var w := _whole_continent_window()
 	var half: float = continent()["size_km"] * 500.0
 	for s in 400:
 		var a := s * 2.399963

@@ -690,24 +690,92 @@ func _build_details() -> void:
 	for k in 3:
 		_add_multimesh(_details, TargetMaterials.bush_mesh(TargetMaterials.BUSHES[k]), bushes[k], true)
 
-	# Gras und Blumen: dicht auf offener Wiese, nicht im Wald, nicht im Wasser.
-	var grass := []
-	var flowers := []
-	_scan(0.85, 21, func(gx: int, gy: int, x: float, y: float, h: float) -> void:
-		if h < 0.7 or window.forest_at(x, y) > 0.45:
-			return
-		var r := _hash01(gx, gy, seed_value, 22)
-		var s := u * (1.3 + 0.9 * _hash01(gx, gy, seed_value, 23))
-		var basis := Basis(Vector3.UP, r * 97.0).scaled(Vector3(s, s, s))
-		var xform := Transform3D(basis, _render(x, y, h) - Vector3(0.0, 0.02 * u, 0.0))
-		if r < 0.045:
-			flowers.append([xform, int(_hash01(gx, gy, seed_value, 24) * 8.0)])
-		else:
-			grass.append([xform, int(r * 8.0) % 8])
-	)
-	_add_cards(grass, TargetMaterials.texture(TargetMaterials.T + "grass_atlas.png"), 0.6, 1.1, false)
-	_add_cards(flowers, TargetMaterials.texture(TargetMaterials.T + "flower_atlas.png"), 0.6, 0.55, true)
+	# Gras und Blumen: dicht auf offener Wiese, nicht im Wald, nicht im Wasser. Zeilenweise auf allen
+	# Kernen; jede Zeile schreibt fertige MultiMesh-Daten (fest je Weltzelle, gleiche Reihenfolge).
+	var cards := _scan_cards(0.72, 21, seed_value)
+	_add_card_buffer(cards[0], cards[1], TargetMaterials.texture(TargetMaterials.T + "grass_atlas.png"), 0.6, 1.1, false)
+	_add_card_buffer(cards[2], cards[3], TargetMaterials.texture(TargetMaterials.T + "flower_atlas.png"), 0.6, 0.55, true)
 
+
+## Gras- und Blumenkarten als MultiMesh-Puffer: [Gras, Anzahl, Blumen, Anzahl].
+## Je Karte 16 Zahlen: Lage (3 × 4) und Zusatzdaten (Atlasfeld, –, Phase, –).
+func _scan_cards(spacing: float, salt: int, seed_value: int) -> Array:
+	var half := window.size * 0.5
+	var gy0 := int(floor((window.cy - half) / spacing))
+	var gy1 := int(ceil((window.cy + half) / spacing))
+	var gx0 := int(floor((window.cx - half) / spacing))
+	var gx1 := int(ceil((window.cx + half) / spacing))
+	var rows := []
+	rows.resize(gy1 - gy0 + 1)
+	var u := units_per_m
+	var w := window
+	var hs := height_scale
+	var mutex := Mutex.new()
+	var job := func(r: int) -> void:
+		var gy := gy0 + r
+		var grass := PackedFloat32Array()
+		var flowers := PackedFloat32Array()
+		for gx in range(gx0, gx1 + 1):
+			var x := (gx + _hash01(gx, gy, seed_value, salt)) * spacing
+			var y := (gy + _hash01(gx, gy, seed_value, salt + 1)) * spacing
+			if not w.contains(x, y):
+				continue
+			var h := w.height_at(x, y)
+			# Zum Ufer und zum Waldrand hin lichter statt mit harter Kante.
+			var edge := _hash01(gx, gy, seed_value, 26)
+			if h < 0.7 + 1.6 * edge or w.forest_at(x, y) > 0.2 + 0.35 * (1.0 - edge):
+				continue
+			var k := _hash01(gx, gy, seed_value, 22)
+			var s := u * (0.95 + 0.65 * _hash01(gx, gy, seed_value, 23))
+			var b := Basis(Vector3.UP, k * 97.0).scaled(Vector3(s, s, s))
+			var o := Vector3((x - w.cx) * u, h * hs - 0.02 * u, -(y - w.cy) * u)
+			var cell := 0.0
+			var target := grass
+			if k < 0.045:
+				cell = float(int(_hash01(gx, gy, seed_value, 24) * 8.0)) / 8.0
+				target = flowers
+			else:
+				cell = float(int(k * 8.0) % 8) / 8.0
+			target.append_array([b.x.x, b.y.x, b.z.x, o.x, b.x.y, b.y.y, b.z.y, o.y, b.x.z, b.y.z, b.z.z, o.z,
+				cell, 0.0, _hash01(gx, gy, seed_value, 25), 0.0])
+			if k < 0.045:
+				flowers = target
+			else:
+				grass = target
+		mutex.lock()
+		rows[r] = [grass, flowers]
+		mutex.unlock()
+	var task := WorkerThreadPool.add_group_task(job, rows.size(), -1, true, "Weltwerk Gras")
+	WorkerThreadPool.wait_for_group_task_completion(task)
+	var all_grass := PackedFloat32Array()
+	var all_flowers := PackedFloat32Array()
+	for row in rows:
+		all_grass.append_array(row[0])
+		all_flowers.append_array(row[1])
+	return [all_grass, all_grass.size() / 16, all_flowers, all_flowers.size() / 16]
+
+
+func _add_card_buffer(buffer: PackedFloat32Array, count: int, atlas: Texture2D, height: float, width: float, flowers: bool) -> void:
+	if atlas == null or count == 0:
+		return
+	var mesh := TargetMaterials.tuft_mesh(width, height, atlas, flowers)
+	var material := mesh.surface_get_material(0) as ShaderMaterial
+	material.set_shader_parameter("meadow_origin", Vector2(window.cx, -window.cy))
+	material.set_shader_parameter("meadow_scale", units_per_m)
+	material.set_shader_parameter("fade_start", 230.0)
+	material.set_shader_parameter("fade_end", 340.0)
+	material.set_shader_parameter("calm_start", 60.0)
+	material.set_shader_parameter("calm_end", 200.0)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	mm.mesh = mesh
+	mm.instance_count = count
+	mm.buffer = buffer
+	var inst := MultiMeshInstance3D.new()
+	inst.multimesh = mm
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_details.add_child(inst)
 
 ## Geht ein Weltgitter (Abstand spacing in m) im Ausschnitt durch; Punkt je Zelle fest verschoben.
 func _scan(spacing: float, salt: int, visit: Callable) -> void:
