@@ -1,0 +1,213 @@
+{
+  "dauer_s": 71.02,
+  "gezeichnete_bilder": 3222,
+  "gespeicherte_bilder": 1634,
+  "ausgelassen_weil_speicher_voll": 0,
+  "aufnahme_bilder_je_s_hoechstens": 30.0,
+  "bildgroesse": [
+    1280,
+    800
+  ],
+  "bildabstand_ms": {
+    "mittel": 22.04,
+    "median": 16.71,
+    "p95": 35.41,
+    "p99": 127.33,
+    "groesster": 1116.25
+  },
+  "ruckler_50_bis_200_ms": 55,
+  "pause_ab_ms": 200.0,
+  "pausen_anzahl": 15,
+  "pausen_gesamt_s": 10.503,
+  "pausen": [
+    {
+      "start_s": 2.305,
+      "duration_s": 1.113,
+      "handlung": "Klick „Neu zeichnen“",
+      "vorher": "Globus",
+      "nachher": "Kontinent 1.600 km, 0 Bearb.",
+      "ursache": "Klick „Neu zeichnen“: Kontinent geöffnet, Ansicht 1.600 km berechnet"
+    },
+    {
+      "start_s": 3.713,
+      "duration_s": 0.921,
+      "handlung": "Breitengrad 42° gesetzt",
+      "vorher": "Kontinent 1.600 km, 0 Bearb.",
+      "nachher": "Kontinent 1.600 km, 0 Bearb.",
+      "ursache": "Breitengrad 42° gesetzt: Lage auf dem Globus geändert, Kontinent neu berechnet"
+    },
+    {
+      "start_s": 10.585,
+      "duration_s": 0.496,
+      "handlung": "Umriss zeichnen",
+      "vorher": "Kontinent 1.600 km, 0 Bearb.",
+      "nachher": "Kontinent 1.600 km, 1 Bearb.",
+      "ursache": "Umriss zeichnen: neue Bearbeitung, Gelände neu berechnet"
+    },
+    {
+      "start_s": 25.253,
+      "duration_s": 0.637,
+      "handlung": "Mausrad hinein → Region 200 km",
+      "vorher": "Kontinent 1.600 km, 4 Bearb.",
+      "nachher": "Ausschnitt 200 km, 4 Bearb.",
+      "ursache": "Mausrad hinein → Region 200 km: vertieft, Ausschnitt 200 km berechnet"
+    },
+    {
+      "start_s": 29.073,
+      "duration_s": 0.602,
+      "handlung": "Mausrad hinein → Ausschnitt 25 km",
+      "vorher": "Ausschnitt 200 km, 4 Bearb.",
+      "nachher": "Ausschnitt 200 km, 4 Bearb.",
+      "ursache": "Mausrad hinein → Ausschnitt 25 km: Ausschnitt wandert mit, neu berechnet"
+    },
+    {
+      "start_s": 29.853,
+      "duration_s": 0.629,
+      "handlung": "Mausrad hinein → Ausschnitt 25 km",
+      "vorher": "Ausschnitt 200 km, 4 Bearb.",
+      "nachher": "Ausschnitt 25 km, 4 Bearb.",
+      "ursache": "Mausrad hinein → Ausschnitt 25 km: vertieft, Ausschnitt 25 km berechnet"
+    },
+    {
+      "start_s": 33.339,
+      "duration_s": 0.665,
+      "handlung": "Mausrad hinein → Detail 3,1 km",
+      "vorher": "Ausschnitt 25 km, 4 Bearb.",
+      "nachher": "Ausschnitt 25 km, 4 Bearb.",
+      "ursache": "Mausrad hinein → Detail 3,1 km: Ausschnitt wandert mit, neu berechnet"
+    },
+    {
+      "start_s": 34.484,
+      "duration_s": 0.667,
+      "handlung": "Mausrad hinein → Detail 3,1 km",
+      "vorher": "Ausschnitt 25 km, 4 Bearb.",
+      "nachher": "Ausschnitt 3,1 km, 4 Bearb.",
+      "ursache": "Mausrad hinein → Detail 3,1 km: vertieft, Ausschnitt 3,1 km berechnet"
+    },
+    {
+      "start_s": 48.006,
+      "duration_s": 0.841,
+      "handlung": "Mausrad hinaus",
+      "vorher": "Ausschnitt 3,1 km, 6 Bearb.",
+      "nachher": "Ausschnitt 25 km, 6 Bearb.",
+      "ursache": "Mausrad hinaus: herausgezoomt, Ausschnitt 25 km berechnet"
+    },
+    {
+      "start_s": 50.8,
+      "duration_s": 1.116,
+      "handlung": "Mausrad hinaus",
+      "vorher": "Ausschnitt 25 km, 6 Bearb.",
+      "nachher": "Ausschnitt 200 km, 6 Bearb.",
+      "ursache": "Mausrad hinaus: herausgezoomt, Ausschnitt 200 km berechnet"
+    },
+    {
+      "start_s": 54.339,
+      "duration_s": 0.368,
+      "handlung": "Mausrad hinaus",
+      "vorher": "Kontinent 1.600 km, 6 Bearb.",
+      "nachher": "Kontinent 1.600 km, 6 Bearb.",
+      "ursache": "Mausrad hinaus: Ursache nicht erkannt (Ausschnitt und Bearbeitungen unverändert)"
+    },
+    {
+      "start_s": 59.006,
+      "duration_s": 0.373,
+      "handlung": "Übersicht betrachten (keine Eingabe)",
+      "vorher": "Kontinent 1.600 km, 6 Bearb.",
+      "nachher": "Kontinent 1.600 km, 6 Bearb.",
+      "ursache": "Übersicht betrachten (keine Eingabe): Ursache nicht erkannt (Ausschnitt und Bearbeitungen unverändert)"
+    },
+    {
+      "start_s": 62.139,
+      "duration_s": 0.721,
+      "handlung": "Klick „Rückgängig“",
+      "vorher": "Kontinent 1.600 km, 6 Bearb.",
+      "nachher": "Kontinent 1.600 km, 5 Bearb.",
+      "ursache": "Klick „Rückgängig“: Bearbeitung entfernt, Gelände neu berechnet"
+    },
+    {
+      "start_s": 63.918,
+      "duration_s": 0.285,
+      "handlung": "Klick „Rückgängig“",
+      "vorher": "Kontinent 1.600 km, 5 Bearb.",
+      "nachher": "Kontinent 1.600 km, 5 Bearb.",
+      "ursache": "Klick „Rückgängig“: Ursache nicht erkannt (Ausschnitt und Bearbeitungen unverändert)"
+    },
+    {
+      "start_s": 66.437,
+      "duration_s": 1.069,
+      "handlung": "Klick „Wiederholen“",
+      "vorher": "Kontinent 1.600 km, 5 Bearb.",
+      "nachher": "Kontinent 1.600 km, 6 Bearb.",
+      "ursache": "Klick „Wiederholen“: neue Bearbeitung, Gelände neu berechnet"
+    }
+  ],
+  "pruefungen": {
+    "Schaltfläche „Neu zeichnen“ gefunden": true,
+    "Umriss ergibt Land": true,
+    "Schaltfläche „Gelände“ gefunden": true,
+    "Schaltfläche „Gebirge“ gefunden": true,
+    "Drei Gebirgsstriche angelegt": true,
+    "Schaltfläche „Ansehen“ gefunden": true,
+    "Gipfel gefunden vor „Region 200 km“": true,
+    "Maßstab gewechselt: Region 200 km (15 Rasten)": true,
+    "Gipfel gefunden vor „Ausschnitt 25 km“": true,
+    "Maßstab gewechselt: Ausschnitt 25 km (18 Rasten)": true,
+    "Gipfel gefunden vor „Detail 3,1 km“": true,
+    "Maßstab gewechselt: Detail 3,1 km (18 Rasten)": true,
+    "Stufen erreicht: 200 km, 25 km, 3,1 km": true,
+    "Gipfel im Detail gefunden": true,
+    "Schaltfläche „Erhöhen“ gefunden": true,
+    "Erhöhen: Bearbeitung angelegt, Boden höher (4606 → 4629 m)": true,
+    "Schaltfläche „Senken“ gefunden": true,
+    "Senken: Bearbeitung angelegt, Boden tiefer (4679 → 4656 m)": true,
+    "Bearbeitung nahe am Gipfel (201 m vom höchsten Punkt)": true,
+    "Zurück auf Kontinentebene": true,
+    "Schaltfläche „Rückgängig“ gefunden": true,
+    "Rückgängig nimmt die letzte Bearbeitung zurück": true,
+    "Schaltfläche „Wiederholen“ gefunden": true,
+    "Wiederholen stellt sie wieder her": true,
+    "Gespeichert = geladen": true
+  },
+  "abschnitte": [
+    {
+      "t_s": 0.3,
+      "text": "Neue Welt: leerer Globus"
+    },
+    {
+      "t_s": 1.8,
+      "text": "1 · Neuen Kontinent anlegen und den Umriss zeichnen"
+    },
+    {
+      "t_s": 13.42,
+      "text": "2 · Gebirge entlang eines Strichs malen"
+    },
+    {
+      "t_s": 23.44,
+      "text": "3 · Mit dem Mausrad zum Gipfel hinein – am Anschlag öffnet sich der feinere Ausschnitt"
+    },
+    {
+      "t_s": 39.82,
+      "text": "4 · Am Berg: „Erhöhen“ – eine Schulter aufbauen"
+    },
+    {
+      "t_s": 43.07,
+      "text": "4 · Am Berg: „Senken“ – eine Scharte einschneiden"
+    },
+    {
+      "t_s": 46.56,
+      "text": "5 · Mit dem Mausrad hinaus bis zum Kontinent"
+    },
+    {
+      "t_s": 61.49,
+      "text": "6 · Rückgängig: „Senken“ wird zurückgenommen"
+    },
+    {
+      "t_s": 65.59,
+      "text": "6 · Wiederholen: „Senken“ ist wieder da"
+    },
+    {
+      "t_s": 68.98,
+      "text": "Ende"
+    }
+  ]
+}

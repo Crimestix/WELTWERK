@@ -53,3 +53,8 @@ desktop.ini
 
 # Filmaufnahme (groß, wird neu erzeugt: --write-movie … -- --aufnahme=<Ordner>)
 /docs/aufnahme/*.ogv
+# Echtzeit-Aufnahme (--echtzeit=<Ordner>, tools/make_video.py): Einzelbilder und Film neu erzeugbar
+/docs/aufnahme/*.avi
+/docs/aufnahme/**/frames/
+/docs/aufnahme/**/*.avi
+/docs/aufnahme/**/welt.json
