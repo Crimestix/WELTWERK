@@ -133,6 +133,24 @@ func test_new_variant_keeps_hand_edits() -> void:
 	check_equal((doc.continents[0]["strokes"] as Array).size(), 1, "Strich noch da")
 
 
+func test_resize_carries_hand_edits_along() -> void:
+	var doc := _doc()
+	var size: float = doc.continents[0]["size_km"] * 1000.0
+	var sea := Vector2(size * 0.49, 0.0)
+	doc.execute(WorldDocument.add_stroke_command(0, _painted("land_add", sea.x - size * 0.05, sea.y, size * 0.075, 1.0)))
+	doc.remember_region(0, 1000.0, 2000.0, size / 8.0)
+	var before: Dictionary = doc.to_dict()
+	doc.execute(doc.resize_command(0, doc.continents[0]["size_km"] * 1.5))
+	var stroke: Dictionary = doc.continents[0]["strokes"][0]
+	check_near(stroke["radius"], size * 0.075 * 1.5, 0.01, "Pinselgröße wächst mit")
+	check_near(stroke["points"][0], (sea.x - size * 0.05) * 1.5, 0.01, "Lage wächst mit")
+	check_near(doc.continents[0]["regions"][0]["size"], size / 8.0 * 1.5, 0.01, "Region wächst mit")
+	var w := _sampler(doc).window(0.0, 0.0, size * 1.5, RES)
+	check(w.height_at(sea.x * 1.5, sea.y) > 0.0, "angefügtes Land liegt weiter an der Küste")
+	doc.undo()
+	check_equal(JSON.stringify(doc.to_dict()), JSON.stringify(before), "Rückgängig stellt alles exakt her")
+
+
 func test_climate_follows_latitude_and_override() -> void:
 	var warm := Climate.derive(10.0, {}, {})
 	var cold := Climate.derive(60.0, {}, {})

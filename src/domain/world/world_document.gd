@@ -47,6 +47,30 @@ static func add_stroke_command(continent: int, stroke: Dictionary) -> Dictionary
 	return {"kind": "add_stroke", "continent": continent, "stroke": stroke}
 
 
+## Kontinent vergrößern oder verkleinern: Alle Bearbeitungen und gemerkten Regionen wachsen mit
+## (Lage und Pinselgröße mal Faktor; Höhenangaben in Metern bleiben). Entscheidung des
+## Spielleiters, 21. 11. 2026: „Alles wächst mit.“ Rückgängig stellt den alten Stand exakt her.
+func resize_command(continent: int, new_size_km: float, old_size_km: float = -1.0) -> Dictionary:
+	var c: Dictionary = continents[continent]
+	if old_size_km <= 0.0:
+		old_size_km = c["size_km"]
+	var factor := new_size_km / old_size_km
+	var new_strokes := []
+	for stroke in c["strokes"]:
+		var s: Dictionary = (stroke as Dictionary).duplicate(true)
+		s["radius"] = float(s["radius"]) * factor
+		var points: Array = s["points"]
+		for k in points.size():
+			points[k] = float(points[k]) * factor
+		new_strokes.append(s)
+	var new_regions := []
+	for region in c["regions"]:
+		new_regions.append({"cx": region["cx"] * factor, "cy": region["cy"] * factor, "size": region["size"] * factor})
+	return {"kind": "resize", "continent": continent, "old": old_size_km, "new": new_size_km,
+		"old_strokes": (c["strokes"] as Array).duplicate(true), "new_strokes": new_strokes,
+		"old_regions": (c["regions"] as Array).duplicate(true), "new_regions": new_regions}
+
+
 ## Einen Wert setzen; key darf ein Pfad sein, z. B. "climate_override.snowline_offset".
 func set_command(continent: int, key: String, new_value: Variant, old_value: Variant = null) -> Dictionary:
 	if old_value == null:
@@ -121,6 +145,12 @@ func _apply(command: Dictionary, forward: bool) -> void:
 				strokes.pop_back()
 		"set":
 			_set_value(command["continent"], command["key"], command["new"] if forward else command["old"])
+		"resize":
+			var c: Dictionary = continents[command["continent"]]
+			var side := "new" if forward else "old"
+			c["size_km"] = command[side]
+			c["strokes"] = (command[side + "_strokes"] as Array).duplicate(true)
+			c["regions"] = (command[side + "_regions"] as Array).duplicate(true)
 
 
 # --- Navigation (kein Befehl: gehört nicht zum Rückgängig-Verlauf) -----------------------------

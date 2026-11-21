@@ -31,6 +31,8 @@ var _painted_live := false
 var _placement_before := {}
 var _save_timer: Timer
 var _args := {}
+## Einmaliger Hinweis in der Statuszeile (bis zur nächsten Änderung).
+var _notice := ""
 
 
 func _ready() -> void:
@@ -258,7 +260,15 @@ func _on_placement(key: String, value: float, final: bool) -> void:
 	var before: Variant = _placement_before[key]
 	_placement_before.erase(key)
 	doc.preview_value(0, key, before)
-	if not is_equal_approx(float(before), value):
+	if is_equal_approx(float(before), value):
+		return
+	if key == "size_km":
+		var count := (continent()["strokes"] as Array).size()
+		doc.execute(doc.resize_command(0, value, before))
+		if count > 0:
+			_notice = "%d Bearbeitung%s mitvergrößert (Rückgängig mit Strg/⌘+Z)" % [count, "" if count == 1 else "en"]
+			_update_ui()
+	else:
 		doc.execute(doc.set_command(0, key, value, before))
 
 
@@ -286,7 +296,7 @@ func _on_doc_changed(command: Dictionary, undone: bool) -> void:
 		globe.show_continent(continent(), doc.planet, _coarse_window())
 		_update_ui()
 	else:
-		if command["kind"] == "set" and command["key"] == "size_km":
+		if command["kind"] == "resize":
 			open_continent()
 		else:
 			_show_level()
@@ -329,6 +339,9 @@ func _update_ui() -> void:
 	var c := continent()
 	var strokes: int = (c["strokes"] as Array).size()
 	var origin := "Grundform erzeugt aus Ausgangswert %d · %d Bearbeitung%s" % [c["seed"], strokes, "" if strokes == 1 else "en"]
+	if _notice != "":
+		origin = _notice + " · " + origin
+		_notice = ""
 	if in_globe:
 		ui.set_status("Globus · Ziehen dreht · am Anschlag weiter hineinzoomen öffnet den Kontinent · " + origin)
 	else:
