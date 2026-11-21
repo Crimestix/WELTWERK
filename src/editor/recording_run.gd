@@ -195,3 +195,129 @@ func press(label: String) -> bool:
 		return false
 	await click(center_of(b))
 	return true
+
+
+## Referenz-Bildpunkt (1586 × 992) auf den eigenen Bildschirm.
+func ref(p: Vector2) -> Vector2:
+	var view: Vector2 = editor.get_viewport().get_visible_rect().size
+	return p / ComparisonRun.REF_SIZE * view
+
+
+func ref_points(points: Array) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for p in points:
+		out.append(ref(p))
+	return out
+
+
+## Werkzeug über die Oberfläche wählen: erst die Gruppe in der linken Leiste, dann das Werkzeug.
+func choose(group: String, tool_label: String) -> void:
+	# Ist die Gruppe schon offen, würde ein zweiter Klick sie schließen.
+	if find_button(tool_label) == null:
+		await press(group)
+		await frames(8)
+	await press(tool_label)
+	await frames(10)
+
+
+func run(dir: String) -> void:
+	_setup_overlay()
+	var started := Time.get_ticks_usec()
+	var comparison := ComparisonRun.new(editor)
+	await frames(30)
+	caption("Neue Welt: leerer Globus")
+	await frames(45)
+
+	# 1 Kontinent anlegen
+	caption("1 · Neuen Kontinent anlegen und den Umriss zeichnen")
+	await press("Neu zeichnen")
+	await frames(20)
+	comparison._frame()
+	await frames(25)
+	var outline := comparison.outline_points()
+	var screen := PackedVector2Array()
+	for k in range(0, outline.size(), 2):
+		screen.append(ref(outline[k]))
+	var t := Time.get_ticks_usec()
+	await drag(screen, 14.0)
+	timing["Umriss zeichnen → Kontinent berechnet"] = (Time.get_ticks_usec() - t) / 1000.0
+	checks["Umriss ergibt Land"] = (editor.continent()["strokes"] as Array).size() == 1
+	await frames(30)
+
+	# 2 Bucht wegschneiden
+	caption("2 · Eine Bucht wegschneiden")
+	await choose("Form", "Land wegschneiden")
+	await drag(ref_points(ComparisonRun.BAY + [ComparisonRun.BAY[0]]), 10.0)
+	await frames(30)
+
+	# 3 Gebirge, Wald, Fluss, See
+	caption("3 · Gebirge entlang eines Strichs")
+	await choose("Gelände", "Gebirge")
+	for chain in ComparisonRun.MOUNTAINS.slice(0, 2):
+		await drag(ref_points(chain), 7.0)
+		await frames(10)
+	caption("Neu würfeln: gleiche Stelle, andere Form")
+	await press("Neu würfeln")
+	await frames(30)
+	caption("4 · Wald verteilen")
+	await choose("Bewuchs", "Wald verteilen")
+	for chain in ComparisonRun.FORESTS.slice(0, 3):
+		await drag(ref_points(chain), 8.0)
+	await frames(20)
+	caption("5 · Fluss vom Gebirge zum Meer, ein See")
+	await choose("Wasser", "Fluss")
+	await drag(ref_points(ComparisonRun.RIVERS[0]), 8.0)
+	await frames(20)
+	await choose("Wasser", "See")
+	await click(ref(ComparisonRun.LAKES[0]))
+	await frames(30)
+
+	# 4 Form nachträglich ändern
+	caption("6 · Die gezeichnete Form nachträglich ändern")
+	await choose("Form", "Formen bearbeiten")
+	var land_point := ref(Vector2(700, 640))
+	await click(land_point)
+	await frames(20)
+	# Ostküste ein Stück nach außen ziehen (Punkt der Form unter dem Zeiger).
+	var shape: Dictionary = editor.continent()["strokes"][0]
+	var best := Vector2.ZERO
+	var best_x := -INF
+	for i in Stroke.dab_count(shape):
+		var p := Stroke.point(shape, i)
+		var s: Vector2 = editor.camera_rig.camera.unproject_position(editor.landscape.to_render(p.x, p.y))
+		if s.y > 350 and s.y < 600 and s.x > best_x and s.x < 1300:
+			best_x = s.x
+			best = s
+	var before := (editor.continent()["strokes"] as Array).size()
+	if best_x > -INF:
+		await drag(PackedVector2Array([best, best + Vector2(70, 20)]), 4.0)
+	await frames(30)
+	caption("Rückgängig und Wiederholen")
+	await press("Rückgängig")
+	await frames(30)
+	await press("Wiederholen")
+	await frames(30)
+	checks["Form geändert, Anzahl Bearbeitungen gleich"] = (editor.continent()["strokes"] as Array).size() == before
+
+	# 5 Näher heran und zurück
+	caption("7 · Näher heran: Gebirge, Wald, Fluss")
+	await press("Ansehen")
+	await wheel(ref(Vector2(560, 400)), 6, true, 6)
+	await frames(40)
+	await wheel(ref(Vector2(560, 400)), 6, false, 6)
+	await frames(30)
+
+	# 6 Auf dem Globus
+	caption("8 · Zurück zum Globus")
+	await press("Welt")
+	await frames(60)
+	caption("")
+	await frames(20)
+	timing["Ablauf gesamt (Wanduhr)"] = (Time.get_ticks_usec() - started) / 1000.0
+	editor._save_now()
+	var file := FileAccess.open(dir.path_join("aufnahme.json"), FileAccess.WRITE)
+	file.store_string(JSON.stringify({"checks": checks, "timing_ms": timing}, "  "))
+	file.close()
+	for key in checks:
+		print("  %s %s" % ["ok  " if checks[key] else "FEHLT", key])
+	editor.get_tree().quit()
