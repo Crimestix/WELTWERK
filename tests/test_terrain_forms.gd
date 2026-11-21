@@ -224,3 +224,54 @@ func test_base_cache_gives_identical_windows() -> void:
 	var fresh := TerrainSampler.new(c, planet).window(10000.0, -5000.0, 200000.0, 65)
 	check(cached.height == fresh.height, "Höhen gleich mit und ohne Zwischenspeicher")
 	check(cached.height != first.height, "neue Bearbeitung wirkt trotz Zwischenspeicher")
+
+
+func test_mountain_relief_same_at_all_scales() -> void:
+	# Ein Gebirgszug, ausgewertet grob (Kontinent) und fein (Region 1:8): Grate und Täler liegen an
+	# denselben Stellen – die grobe Ansicht ist die geglättete feine (hohe Übereinstimmung der Höhen).
+	var c := WorldDocument.new_continent(77, WorldDocument.BASE_DRAWN, 1600.0)
+	var shape := Stroke.create_shape(true, PackedVector2Array([Vector2(-600000, -500000), Vector2(600000, -500000),
+		Vector2(600000, 500000), Vector2(-600000, 500000)]), 19200.0)
+	(c["strokes"] as Array).append(shape)
+	var range_stroke := Stroke.create_generated("gen_mountains", 120000.0, 3200.0, 4242)
+	for k in 9:
+		Stroke.add_point(range_stroke, -300000.0 + k * 75000.0, -40000.0 + k * 10000.0)
+	(c["strokes"] as Array).append(range_stroke)
+	var planet := {"radius_km": 6371.0, "temperature_offset": 0.0}
+	var sampler := TerrainSampler.new(c, planet)
+	var coarse := sampler.window(0.0, 0.0, 1600000.0, 513)
+	var fine := sampler.window(0.0, 0.0, 200000.0, 257)
+	var a := PackedFloat32Array()
+	var b := PackedFloat32Array()
+	for j in 21:
+		for i in 21:
+			var x := -90000.0 + i * 9000.0
+			var y := -90000.0 + j * 9000.0
+			a.append(coarse.height_at(x, y))
+			# Fein über eine grobe Zelle gemittelt (so viel zeigt die grobe Ansicht).
+			var sum := 0.0
+			for dy in [-1000.0, 0.0, 1000.0]:
+				for dx in [-1000.0, 0.0, 1000.0]:
+					sum += fine.height_at(x + dx, y + dy)
+			b.append(sum / 9.0)
+	var corr := _correlation(a, b)
+	check(corr > 0.9, "grob und fein stimmen überein (Korrelation %.3f)" % corr)
+
+
+static func _correlation(a: PackedFloat32Array, b: PackedFloat32Array) -> float:
+	var n := a.size()
+	var ma := 0.0
+	var mb := 0.0
+	for k in n:
+		ma += a[k]
+		mb += b[k]
+	ma /= n
+	mb /= n
+	var sab := 0.0
+	var saa := 0.0
+	var sbb := 0.0
+	for k in n:
+		sab += (a[k] - ma) * (b[k] - mb)
+		saa += (a[k] - ma) * (a[k] - ma)
+		sbb += (b[k] - mb) * (b[k] - mb)
+	return sab / sqrt(maxf(saa * sbb, 1e-9))
