@@ -9,7 +9,8 @@ extends Node3D
 ## --welt in einer eigenen Testdatei, nie in der Hauptwelt) · --demo=<Ordner> Ablauf vorführen ·
 ## --abnahme=<Ordner> Abnahmeablauf (Schritt über --schritt=1|2) · --vergleich=<Ordner> Vergleich mit
 ## der Kontinentalreferenz (ComparisonRun) · --aufnahme=<Ordner> Bedienablauf für eine Filmaufnahme
-## (RecordingRun, mit --write-movie) · --screenshot=<Pfad>.
+## (RecordingRun, mit --write-movie) · --orte=<Ordner> Ortsprüfung: Gipfel, Pass, Tal auf allen
+## Stufen (LandmarkRun, Schritt über --schritt=1|2) · --screenshot=<Pfad>.
 
 const DEFAULT_PATH := "user://welt.json"
 const FACTOR := 8.0
@@ -49,6 +50,7 @@ var _dirty := false
 ## Laufender Vergleich mit der Referenz (hält das Objekt am Leben, solange es wartet).
 var _comparison: ComparisonRun
 var _recording: RecordingRun
+var _landmarks: LandmarkRun
 
 
 func _ready() -> void:
@@ -69,11 +71,14 @@ func _ready() -> void:
 	if _args.has("aufnahme"):
 		save_path = _args["aufnahme"].path_join("welt.json")
 		DirAccess.make_dir_recursive_absolute(_args["aufnahme"])
+	if _args.has("orte"):
+		save_path = _args["orte"].path_join("welt.json")
+		DirAccess.make_dir_recursive_absolute(_args["orte"])
 	if _args.has("neu") and not _args.has("welt") and not _args.has("demo") and not _args.has("abnahme"):
 		# Eine neue Welt zum Ausprobieren berührt nie die Hauptwelt.
 		save_path = "user://welt_neu.json"
 	save_path = _args.get("welt", save_path)
-	var fresh: bool = _args.has("neu") or _args.has("vergleich") or _args.has("aufnahme") or (_args.has("abnahme") and _args.get("schritt", "1") == "1")
+	var fresh: bool = _args.has("neu") or _args.has("vergleich") or _args.has("aufnahme") 		or ((_args.has("abnahme") or _args.has("orte")) and _args.get("schritt", "1") == "1")
 
 	doc = null if fresh else WorldDocument.load_file(save_path)
 	if WorldDocument.load_problem != "":
@@ -162,6 +167,9 @@ func _ready() -> void:
 	elif _args.has("aufnahme"):
 		_recording = RecordingRun.new(self)
 		_recording.run(_args["aufnahme"])
+	elif _args.has("orte"):
+		_landmarks = LandmarkRun.new(self)
+		_landmarks.run(_args["orte"], _args.get("schritt", "1"))
 	elif _args.has("stufen"):
 		_run_levels(_args["stufen"])
 	elif _args.has("abnahme"):

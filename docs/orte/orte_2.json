@@ -1,0 +1,767 @@
+{
+  "checks": {
+    "Ergebnis von Schritt 1 gelesen": true,
+    "Nach Neustart: Erhöhen mit der Maus wirkt (+187 m)": true,
+    "Nach Neustart: Rückgängig bitgleich zum geladenen Stand": true,
+    "Nach Neustart: Rückgängig der weiteren Bearbeitung bitgleich": true,
+    "Nach Neustart: Wiederholen stellt die Bearbeitung her (Abweichung 0.0005 m)": true,
+    "Nach Neustart: gespeichert = geladen": true,
+    "Nach Neustart: weitere Bearbeitung (Senken -125 m)": true,
+    "Neustart: Gipfel – 5.883,4 m an derselben Stelle (und 5 × 5 Punkte)": true,
+    "Neustart: Gipfel – Höhen bitgleich (25-km-Ausschnitt, Prüfsumme)": true,
+    "Neustart: Kontinent da": true,
+    "Neustart: Kontinentstufe bitgleich (Prüfsumme)": true,
+    "Neustart: Pass – 4.822,9 m an derselben Stelle (und 5 × 5 Punkte)": true,
+    "Neustart: Pass – Höhen bitgleich (25-km-Ausschnitt, Prüfsumme)": true,
+    "Neustart: Tal – 506,2 m an derselben Stelle (und 5 × 5 Punkte)": true,
+    "Neustart: Tal – Höhen bitgleich (25-km-Ausschnitt, Prüfsumme)": true,
+    "Neustart: gleiche Zahl Bearbeitungen (28)": true,
+    "Neustart: letzte Ansicht wiederhergestellt (3 Stufen)": true
+  },
+  "failed": 0,
+  "places": [
+    {
+      "axis": {
+        "fall": [
+          0.0,
+          -1.0
+        ],
+        "rise": [
+          1.0,
+          0.0
+        ]
+      },
+      "height": 5584.22900390625,
+      "key": "gipfel",
+      "kind": "peak",
+      "levels": [
+        {
+          "cell_m": 3125.0,
+          "diff_to_detail_m": [
+            [
+              -155.52,
+              -160.08,
+              -279.27,
+              -210.31,
+              -225.37
+            ],
+            [
+              -145.89,
+              -304.44,
+              -324.43,
+              -392.02,
+              -207.31
+            ],
+            [
+              -130.76,
+              -308.84000000000003,
+              -542.49,
+              -255.51,
+              -160.13
+            ],
+            [
+              -189.13,
+              -287.45,
+              -398.75,
+              -225.79,
+              -10.02
+            ],
+            [
+              -95.68,
+              -368.9,
+              -311.04,
+              -203.87,
+              -27.98
+            ]
+          ],
+          "form": {
+            "cell": 3125.0,
+            "extreme_height": 5175.150149301167,
+            "form_kept": 123.54258415446202,
+            "form_radius": 3068.7257611773907,
+            "form_reference": 615.4143476402287,
+            "height": 5051.463265634027,
+            "note": "kleiner als 3 Zellen – darf geglättet sein",
+            "offset_allowed_m": 3125.0,
+            "offset_m": 2144.883056640625,
+            "ok": false,
+            "resolved": false,
+            "tolerance_m": 81.54143476402288
+          },
+          "height": 5051.463265634027,
+          "max_abs_diff_m": 542.4884864811729,
+          "max_abs_diff_to_cell_mean_m": 256.24790475195914,
+          "max_tolerance_m": 619.793701171875,
+          "mean_diff_m": -236.8398838669802,
+          "name": "Kontinent",
+          "window": [
+            0.0,
+            0.0,
+            1600000.0,
+            513.0
+          ]
+        },
+        {
+          "cell_m": 781.25,
+          "diff_to_detail_m": [
+            [
+              -34.730000000000004,
+              -1.02,
+              -30.9,
+              10.06,
+              -64.71000000000001
+            ],
+            [
+              -9.19,
+              -68.60000000000001,
+              7.91,
+              -81.83,
+              -53.75
+            ],
+            [
+              6.59,
+              -35.95,
+              -167.1,
+              29.45,
+              -38.04
+            ],
+            [
+              -48.2,
+              2.44,
+              -35.28,
+              -22.17,
+              65.54
+            ],
+            [
+              38.72,
+              -64.38,
+              -25.94,
+              -21.29,
+              18.6
+            ]
+          ],
+          "form": {
+            "cell": 781.25,
+            "extreme_height": 5429.404566035249,
+            "form_kept": 455.8059113149875,
+            "form_radius": 3068.7257611773907,
+            "form_reference": 615.4143476402287,
+            "height": 5426.85074466012,
+            "offset_allowed_m": 781.25,
+            "offset_m": 477.5657348632813,
+            "ok": true,
+            "resolved": true,
+            "tolerance_m": 81.54143476402288
+          },
+          "height": 5426.85074466012,
+          "max_abs_diff_m": 167.10100745508043,
+          "max_abs_diff_to_cell_mean_m": 57.70200686824319,
+          "max_tolerance_m": 390.553466796875,
+          "mean_diff_m": -24.951273169989943,
+          "name": "Region 200 km",
+          "window": [
+            107812.5,
+            -51562.5,
+            200000.0,
+            257.0
+          ]
+        },
+        {
+          "cell_m": 97.65625,
+          "diff_to_detail_m": [
+            [
+              -14.6,
+              1.59,
+              -3.43,
+              -5.33,
+              -4.08
+            ],
+            [
+              14.43,
+              -11.92,
+              -2.96,
+              -2.06,
+              -9.01
+            ],
+            [
+              -3.71,
+              -14.85,
+              -33.35,
+              2.7,
+              10.56
+            ],
+            [
+              2.79,
+              8.120000000000001,
+              -0.15,
+              4.43,
+              2.35
+            ],
+            [
+              8.620000000000001,
+              -20.6,
+              -6.25,
+              3.99,
+              -9.66
+            ]
+          ],
+          "form": {
+            "cell": 97.65625,
+            "extreme_height": 5560.603116570457,
+            "form_kept": 592.400562877945,
+            "form_radius": 3068.7257611773907,
+            "form_reference": 615.4143476402287,
+            "height": 5560.603116570457,
+            "offset_allowed_m": 767.1814402943477,
+            "offset_m": 0.0,
+            "ok": true,
+            "resolved": true,
+            "tolerance_m": 81.54143476402288
+          },
+          "height": 5560.603116570457,
+          "max_abs_diff_m": 33.34863554474305,
+          "max_abs_diff_to_cell_mean_m": 8.437833867812515,
+          "max_tolerance_m": 113.785400390625,
+          "mean_diff_m": -3.2957249188388955,
+          "name": "Region 25 km",
+          "window": [
+            107812.5,
+            -51953.125,
+            25000.0,
+            257.0
+          ]
+        },
+        {
+          "cell_m": 12.20703125,
+          "form": {
+            "cell": 12.20703125,
+            "extreme_height": 5593.9517521152,
+            "form_kept": 361.9380664043647,
+            "form_radius": 1406.25,
+            "form_reference": 351.94100830194384,
+            "height": 5593.9517521152,
+            "offset_allowed_m": 351.5625,
+            "offset_m": 0.0,
+            "ok": true,
+            "resolved": true,
+            "tolerance_m": 55.19410083019439
+          },
+          "height": 5593.9517521152,
+          "name": "Detail 3,1 km",
+          "window": [
+            107812.5,
+            -51916.50390625,
+            3125.0,
+            257.0
+          ]
+        }
+      ],
+      "name": "Gipfel",
+      "scale": {
+        "relief": 1170.9927263702502,
+        "size": 3068.7257611773907
+      },
+      "x": 107818.359375,
+      "y": -51914.0625
+    },
+    {
+      "axis": {
+        "fall": [
+          -0.7071067690849304,
+          0.7071067690849304
+        ],
+        "fall_m": -56.36886913424496,
+        "rise": [
+          0.7071067690849304,
+          0.7071067690849304
+        ],
+        "rise_m": 11.730011542502323
+      },
+      "height": 4824.57373046875,
+      "key": "pass",
+      "kind": "pass",
+      "levels": [
+        {
+          "cell_m": 3125.0,
+          "diff_to_detail_m": [
+            [
+              78.5,
+              29.49,
+              1.88,
+              -55.54,
+              -91.09
+            ],
+            [
+              -5.18,
+              44.97,
+              26.54,
+              -6.29,
+              -1.22
+            ],
+            [
+              -42.64,
+              -38.69,
+              -16.92,
+              103.88,
+              -18.62
+            ],
+            [
+              -152.36,
+              -126.85,
+              39.93,
+              23.89,
+              129.42000000000002
+            ],
+            [
+              -186.01,
+              -150.62,
+              -25.54,
+              40.09,
+              134.86
+            ]
+          ],
+          "form": {
+            "cell": 3125.0,
+            "fall_kept": 8.353928521515627,
+            "fall_radius": 1003.1718947763198,
+            "fall_reference": 88.84196506078933,
+            "height": 4802.271096439872,
+            "note": "kleiner als 3 Zellen – darf geglättet sein",
+            "ok": false,
+            "resolved": false,
+            "rise_kept": -4.866711378163018,
+            "rise_radius": 1003.1718947763198,
+            "rise_reference": 62.84681792846823
+          },
+          "height": 4802.271096439872,
+          "max_abs_diff_m": 186.00685523482207,
+          "max_abs_diff_to_cell_mean_m": 123.3158379478873,
+          "max_tolerance_m": 457.919677734375,
+          "mean_diff_m": -10.564485046515948,
+          "name": "Kontinent",
+          "window": [
+            0.0,
+            0.0,
+            1600000.0,
+            513.0
+          ]
+        },
+        {
+          "cell_m": 781.25,
+          "diff_to_detail_m": [
+            [
+              23.03,
+              -12.14,
+              -12.58,
+              -24.22,
+              12.13
+            ],
+            [
+              -21.88,
+              27.31,
+              8.42,
+              -16.65,
+              26.63
+            ],
+            [
+              9.0,
+              -16.79,
+              -30.76,
+              56.02,
+              -74.57000000000001
+            ],
+            [
+              -7.63,
+              -49.620000000000005,
+              31.69,
+              -54.93,
+              28.75
+            ],
+            [
+              8.02,
+              -14.81,
+              -1.47,
+              -38.21,
+              27.66
+            ]
+          ],
+          "form": {
+            "cell": 781.25,
+            "fall_kept": 47.7087890161456,
+            "fall_radius": 1003.1718947763198,
+            "fall_reference": 88.84196506078933,
+            "height": 4788.4353219416535,
+            "note": "kleiner als 3 Zellen – darf geglättet sein",
+            "ok": true,
+            "resolved": false,
+            "rise_kept": 57.359097886133895,
+            "rise_radius": 1003.1718947763198,
+            "rise_reference": 62.84681792846823
+          },
+          "height": 4788.4353219416535,
+          "max_abs_diff_m": 74.57153676498547,
+          "max_abs_diff_to_cell_mean_m": 29.19705931607132,
+          "max_tolerance_m": 257.868896484375,
+          "mean_diff_m": -4.704058610841895,
+          "name": "Region 200 km",
+          "window": [
+            105468.75,
+            -37500.0,
+            200000.0,
+            257.0
+          ]
+        },
+        {
+          "cell_m": 97.65625,
+          "diff_to_detail_m": [
+            [
+              5.26,
+              -7.86,
+              -1.76,
+              -0.6,
+              0.46
+            ],
+            [
+              -12.59,
+              0.9,
+              5.28,
+              3.92,
+              9.5
+            ],
+            [
+              -1.94,
+              -19.95,
+              -0.41,
+              3.87,
+              -15.43
+            ],
+            [
+              -1.43,
+              -6.890000000000001,
+              5.63,
+              -21.41,
+              -2.08
+            ],
+            [
+              -0.58,
+              2.38,
+              4.21,
+              -7.16,
+              4.1
+            ]
+          ],
+          "form": {
+            "cell": 97.65625,
+            "fall_kept": 78.54084805118237,
+            "fall_radius": 1003.1718947763198,
+            "fall_reference": 88.84196506078933,
+            "height": 4818.7844133347635,
+            "ok": true,
+            "resolved": true,
+            "rise_kept": 67.72797314084892,
+            "rise_radius": 1003.1718947763198,
+            "rise_reference": 62.84681792846823
+          },
+          "height": 4818.7844133347635,
+          "max_abs_diff_m": 21.41443044357493,
+          "max_abs_diff_to_cell_mean_m": 10.90503248656114,
+          "max_tolerance_m": 105.583984375,
+          "mean_diff_m": -2.182088962996603,
+          "name": "Region 25 km",
+          "window": [
+            105859.375,
+            -37695.3125,
+            25000.0,
+            257.0
+          ]
+        },
+        {
+          "cell_m": 12.20703125,
+          "form": {
+            "cell": 12.20703125,
+            "fall_kept": 79.05687131208015,
+            "fall_radius": 1003.1718947763198,
+            "fall_reference": 88.84196506078933,
+            "height": 4819.193691114461,
+            "ok": true,
+            "resolved": true,
+            "rise_kept": 67.88249468727099,
+            "rise_radius": 1003.1718947763198,
+            "rise_reference": 62.84681792846823
+          },
+          "height": 4819.193691114461,
+          "name": "Detail 3,1 km",
+          "window": [
+            105847.16796875,
+            -37731.93359375,
+            3125.0,
+            257.0
+          ]
+        }
+      ],
+      "name": "Pass",
+      "scale": {
+        "fall": 150.8144293983023,
+        "fall_size": 1003.1718947763198,
+        "relief": 98.15074471889966,
+        "rise": 98.15074471889966,
+        "rise_size": 1003.1718947763198,
+        "size": 1003.1718947763198
+      },
+      "x": 105841.796875,
+      "y": -37734.375
+    },
+    {
+      "axis": {
+        "fall": [
+          -0.7071067690849304,
+          -0.7071067690849304
+        ],
+        "fall_m": 56.50705900489572,
+        "rise": [
+          -0.7071067690849304,
+          0.7071067690849304
+        ],
+        "rise_m": 242.16703450004707
+      },
+      "height": 724.1519165039063,
+      "key": "tal",
+      "kind": "valley",
+      "levels": [
+        {
+          "cell_m": 3125.0,
+          "diff_to_detail_m": [
+            [
+              6.62,
+              49.75,
+              57.27,
+              13.7,
+              48.15
+            ],
+            [
+              58.1,
+              154.59,
+              221.01,
+              173.03,
+              -30.52
+            ],
+            [
+              109.89,
+              279.71,
+              417.2,
+              82.92,
+              -17.240000000000002
+            ],
+            [
+              157.82,
+              396.93,
+              306.89,
+              111.02,
+              -32.14
+            ],
+            [
+              295.53000000000003,
+              312.14,
+              200.21,
+              80.26,
+              19.24
+            ]
+          ],
+          "form": {
+            "cell": 3125.0,
+            "extreme_height": 1136.1658018014289,
+            "form_kept": 281.8178673449677,
+            "form_radius": 2017.7370008563437,
+            "form_reference": 711.3773024939583,
+            "height": 1142.9361790380265,
+            "note": "kleiner als 3 Zellen – darf geglättet sein",
+            "offset_allowed_m": 3125.0,
+            "offset_m": 390.6267700195313,
+            "ok": true,
+            "resolved": false,
+            "tolerance_m": 91.13773024939584
+          },
+          "height": 1142.9361790380265,
+          "max_abs_diff_m": 417.1979586036078,
+          "max_abs_diff_to_cell_mean_m": 184.94419704026916,
+          "max_tolerance_m": 860.0752868652344,
+          "mean_diff_m": 138.88260875684765,
+          "name": "Kontinent",
+          "window": [
+            0.0,
+            0.0,
+            1600000.0,
+            513.0
+          ]
+        },
+        {
+          "cell_m": 781.25,
+          "diff_to_detail_m": [
+            [
+              3.6,
+              13.05,
+              22.03,
+              8.1,
+              83.72
+            ],
+            [
+              8.91,
+              8.14,
+              50.84,
+              67.05,
+              11.36
+            ],
+            [
+              9.69,
+              17.67,
+              140.46,
+              -73.31,
+              9.12
+            ],
+            [
+              -11.85,
+              65.34,
+              19.55,
+              -8.28,
+              -27.16
+            ],
+            [
+              5.78,
+              24.06,
+              25.82,
+              14.75,
+              7.73
+            ]
+          ],
+          "form": {
+            "cell": 781.25,
+            "extreme_height": 866.1957371122253,
+            "form_kept": 568.713558342678,
+            "form_radius": 2017.7370008563437,
+            "form_reference": 711.3773024939583,
+            "height": 866.1957371122253,
+            "offset_allowed_m": 781.25,
+            "offset_m": 0.0,
+            "ok": true,
+            "resolved": true,
+            "tolerance_m": 91.13773024939584
+          },
+          "height": 866.1957371122253,
+          "max_abs_diff_m": 140.45751667780655,
+          "max_abs_diff_to_cell_mean_m": 70.40588177898326,
+          "max_tolerance_m": 486.8255920410156,
+          "mean_diff_m": 19.846919864449863,
+          "name": "Region 200 km",
+          "window": [
+            185937.5,
+            -72656.25,
+            200000.0,
+            257.0
+          ]
+        },
+        {
+          "cell_m": 97.65625,
+          "diff_to_detail_m": [
+            [
+              1.12,
+              3.76,
+              -1.34,
+              0.51,
+              11.5
+            ],
+            [
+              3.22,
+              3.37,
+              4.37,
+              14.65,
+              3.24
+            ],
+            [
+              6.17,
+              -2.51,
+              16.6,
+              -1.03,
+              0.96
+            ],
+            [
+              3.5700000000000003,
+              -7.82,
+              -1.64,
+              -2.31,
+              -5.75
+            ],
+            [
+              3.48,
+              1.62,
+              5.0600000000000005,
+              1.84,
+              3.5500000000000003
+            ]
+          ],
+          "form": {
+            "cell": 97.65625,
+            "extreme_height": 742.3340295549626,
+            "form_kept": 689.7797221155959,
+            "form_radius": 2017.7370008563437,
+            "form_reference": 711.3773024939583,
+            "height": 742.3340295549626,
+            "offset_allowed_m": 504.4342502140859,
+            "offset_m": 0.0,
+            "ok": true,
+            "resolved": true,
+            "tolerance_m": 91.13773024939584
+          },
+          "height": 742.3340295549626,
+          "max_abs_diff_m": 16.59580912054389,
+          "max_abs_diff_to_cell_mean_m": 6.100347571439329,
+          "max_tolerance_m": 119.37518310546876,
+          "mean_diff_m": 2.648158007833512,
+          "name": "Region 25 km",
+          "window": [
+            186230.46875,
+            -72949.21875,
+            25000.0,
+            257.0
+          ]
+        },
+        {
+          "cell_m": 12.20703125,
+          "form": {
+            "cell": 12.20703125,
+            "extreme_height": 725.7382204344187,
+            "form_kept": 495.8644511022278,
+            "form_radius": 1406.25,
+            "form_reference": 498.86345260882354,
+            "height": 725.7382204344187,
+            "offset_allowed_m": 351.5625,
+            "offset_m": 0.0,
+            "ok": true,
+            "resolved": true,
+            "tolerance_m": 69.88634526088236
+          },
+          "height": 725.7382204344187,
+          "name": "Detail 3,1 km",
+          "window": [
+            186279.296875,
+            -72949.21875,
+            3125.0,
+            257.0
+          ]
+        }
+      ],
+      "name": "Tal",
+      "scale": {
+        "relief": 1337.209983582091,
+        "size": 2017.7370008563437
+      },
+      "x": 186277.34375,
+      "y": -72953.125
+    }
+  ],
+  "step": "2",
+  "timing_ms": {
+    "Ablauf gesamt": 10705.235,
+    "Vertiefen auf 200 km (größte Dauer)": 595.018,
+    "Vertiefen auf 25 km (größte Dauer)": 458.697
+  }
+}

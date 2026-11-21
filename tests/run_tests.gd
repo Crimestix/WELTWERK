@@ -12,6 +12,7 @@ const SUITES := [
 	"res://tests/test_continents.gd",
 	"res://tests/test_shape_edit.gd",
 	"res://tests/test_terrain_forms.gd",
+	"res://tests/test_landmarks.gd",
 ]
 
 
