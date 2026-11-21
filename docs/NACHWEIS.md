@@ -18,7 +18,7 @@ Danach wurde das Programm neu gestartet (`--welt=…\welt.json`, Bild 11).
 | ![bearbeitet](nachweis/6_ausschnitt_bearbeitet.jpg) **6 Wald gemalt, Hügel erhöht** | ![Region danach](nachweis/7_region_danach.jpg) **7 Herausgezoomt (25 km):** Wald vereinfacht, Ort markiert, Rahmen des Ausschnitts |
 | ![Kontinent danach](nachweis/8_kontinent_danach.jpg) **8 Kontinent:** Rahmen der vertieften Bereiche, Bearbeitung markiert | ![Rückgängig](nachweis/9_rueckgaengig.jpg) **9 Rückgängig** (Wald und Hügel weg) |
 | ![Wiederholt](nachweis/10_wiederholt.jpg) **10 Wiederholen** | ![Neustart](nachweis/11_nach_neustart.jpg) **11 Nach Neustart:** Kontur, Rahmen, Markierung, 3 Bearbeitungen erhalten |
-| ![Maus](nachweis/12_mit_maus_gemalt.jpg) **12 Mit der Maus gemalt** (echte Eingabeereignisse, Pinselkreis sichtbar) | |
+| ![Maus](nachweis/12_mit_maus_gemalt.jpg) **12 Mit der Maus gemalt** (echte Eingabeereignisse, Pinselkreis sichtbar) | ![390 m](nachweis/13_ausschnitt_390m.jpg) **13 Feinste Stufe 1:4096 (390 m):** Wald aus Blattkarten-Bäumen (Stiltest C) |
 
 ## Abnahme
 
@@ -46,6 +46,7 @@ Dreiecke, Umgebung (gröberer Ausschnitt) gleich groß; Bäume nur in Ausschnitt
 | Kontinent (1.600 km) | 374 | 0,27 Mio. | 228 MB |
 | Region 1:64 (25 km) | 310 | 0,92 Mio. | 233 MB |
 | Ausschnitt 1:512 (3,1 km) mit Bäumen | 307 | 1,63 Mio. | 233 MB |
+| Ausschnitt 1:4096 (390 m), Wald aus Blattkarten-Bäumen | 108 | 1,33 Mio. | 268 MB |
 
 | Vorgang | Dauer |
 |---|---:|
@@ -78,8 +79,8 @@ Arbeitsspeicher des Programms: 75–81 MB.
 
 ## Ungeprüft
 
-- **MacBook Air**: Bildrate, Speicher, Reaktion beim Malen, Trackpad-Gesten (zwei Finger
-  verschieben, spreizen zoomt, auf dem Globus zwei Finger drehen).
+- **MacBook Air**: vorerst nicht Zielgerät (Entscheidung des Spielleiters, 21. 11. 2026); dort
+  ist nichts gemessen.
 - Bedienung durch einen Menschen über längere Zeit (der Vorführmodus klickt nicht in die
   Oberfläche, er ruft dieselben Funktionen auf; nur das Malen läuft über echte Mausereignisse).
 

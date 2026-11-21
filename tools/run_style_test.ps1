@@ -2,7 +2,12 @@
 # Bilder (JPG) und Messwerte (JSON) landen in docs/stiltest/.
 # Aufruf: powershell -ExecutionPolicy Bypass -File tools\run_style_test.ps1
 
-param([string]$Godot = "C:\Users\Mattes\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe")
+param(
+    [string]$Godot = "C:\Users\Mattes\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-stable_win64_console.exe",
+    # Fenster nicht auf dem Hauptbildschirm öffnen (rechter Bildschirm beim Spielleiter).
+    [string]$Position = "2000,60",
+    [string[]]$Variants = @("A", "B", "C")
+)
 
 $project = Resolve-Path (Join-Path $PSScriptRoot "..")
 $out = Join-Path $project "docs\stiltest"
@@ -29,10 +34,10 @@ foreach ($id in "island_tree_02", "grass_medium_02") {
 }
 if ($changed -gt 0) { & $Godot --headless --path $project --import 2>&1 | Out-Null }
 
-foreach ($variant in "A", "B") {
+foreach ($variant in $Variants) {
     foreach ($view in "arbeit", "nah") {
         $name = "$($variant.ToLower())_$view"
-        & $Godot --path $project res://scenes/style_test.tscn -- "--variant=$variant" "--ansicht=$view" `
+        & $Godot --position $Position --path $project res://scenes/style_test.tscn -- "--variant=$variant" "--ansicht=$view" `
             "--bench=$out\$name.json" "--screenshot=$out\$name.jpg" "--overlay=nein" 2>&1 | Out-Null
         $r = Get-Content "$out\$name.json" -Raw | ConvertFrom-Json
         "{0} {1,-6}: {2,6:N1} Bilder/s  (95 % ≤ {3,5:N1} ms)  {4,9:N0} Dreiecke  {5,4} Aufrufe  Grafikspeicher {6,5:N0} MB  Laden {7,5:N0} ms" -f `

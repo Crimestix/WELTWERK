@@ -20,8 +20,14 @@ Arbeitsname, noch nicht sicher. Visueller Kampagneneditor für Pen & Paper (D&D 
 ## Technik (entschieden, 21. 11. 2026)
 - Godot 4.7.2 stable, normale Fassung (ohne .NET). GDScript, Renderer Forward+.
 - Projekt in `D:\WELTWERK`, privates GitHub-Repository `Crimestix/WELTWERK`.
-- Gebaut wird am Windows-PC; geleitet wird an einem MacBook Air 13" (ca. 1440×900, Trackpad).
-  Dort muss es flüssig laufen – Leistung immer mitdenken, Trackpad-Gesten immer mit bedienen.
+- **Zielgerät ist vorerst nur der Windows-PC** (RTX 2070 Super; Entscheidung des Spielleiters,
+  21. 11. 2026: „Macbook ist erstmal egal – nur wichtig für den Windows-Rechner“). Leistung
+  trotzdem mitdenken; Trackpad-Bedienung bleibt drin, wird aber nicht vorrangig gepflegt.
+- **Testfenster nie auf dem Hauptbildschirm** (Wunsch des Spielleiters, 21. 11. 2026): Godot mit
+  `--position 2000,60` starten (rechter Bildschirm; Hauptbildschirm liegt bei 0,0, 1920×1080).
+- Higgsfield-Programm: `%LOCALAPPDATA%\Programs\higgsfield\higgsfield.exe` (Windows-Fassung,
+  nicht im Systempfad; angemeldet). Für Referenzbilder und Texturen; Kosten vorher mit
+  `generate cost` prüfen und im Bericht festhalten.
 - Bezeichner englisch; alle sichtbaren Texte deutsch, klare ganze Wörter, kein
   Entwicklerjargon, deutsche Regelbegriffe.
 
@@ -94,10 +100,9 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
 „Gespeichert“, Pinselkreis mit Einstellungen.
 
 ## Noch offen
-- Bildsprache nach dem Stiltest (`docs/STILTEST.md`): Empfehlung Gelände/Felsen wie B, für
-  Bäume einen dritten Weg testen – Entscheidung des Spielleiters steht aus.
-- Higgsfield-Programm ist nicht installiert (Installation nur mit Okay des Spielleiters).
-- Leistung auf dem MacBook Air noch nicht gemessen (Nachweis: `docs/NACHWEIS.md`).
+- Bildsprache nach dem Stiltest (`docs/STILTEST.md`): Empfehlung Variante C (Blattkarten-Bäume
+  mit Higgsfield-Laub, Poly-Haven-Gelände mit Farbanpassung) – Entscheidung des Spielleiters
+  steht aus. Der Editor nutzt C-Bäume bereits im feinsten Ausschnitt.
 - Kontinentgröße ändern skaliert nur die Grundform, Striche bleiben in Metern – wie soll
   Skalieren mit Handarbeit umgehen?
 - Flüssiger Übergang zwischen Maßstäben, Flüsse am Gefälle, Seen über Meereshöhe, Festsetzen,
@@ -162,7 +167,7 @@ $godot = "C:\Users\Mattes\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-s
 & $godot --headless --path D:\WELTWERK --script res://tests/run_tests.gd        # Tests
 & $godot --path D:\WELTWERK                                                     # starten
 & $godot --path D:\WELTWERK -- --screenshot=C:\pfad\bild.png                    # Bild speichern, beenden
-& $godot --path D:\WELTWERK -- --demo=D:\WELTWERK\docs\nachweis               # Nachweis vorführen (Bilder, Messwerte)
+& $godot --position 2000,60 --path D:\WELTWERK -- --demo=D:\WELTWERK\docs\nachweis  # Nachweis vorführen (Bilder, Messwerte)
 & $godot --path D:\WELTWERK -- --welt=C:\pfad\welt.json --screenshot=C:\pfad\b.jpg  # andere Weltdatei, Bild
 & $godot --path D:\WELTWERK res://scenes/style_test.tscn                         # Stiltest
 powershell -ExecutionPolicy Bypass -File tools\run_style_test.ps1                # Stiltest messen

@@ -5,11 +5,15 @@ extends Node3D
 ##   A – vorhandener Bestand, unverändert (Poly Haven, CC0)
 ##   B – in Blender angepasst bzw. selbst gebaut (tools/blender/make_style_b.py)
 ##
-## Tasten: 1 / 2 Variante, 3 / 4 Arbeits- bzw. Nahansicht.
+##   C – Blattkarten-Bäume aus Blender mit Higgsfield-Laub, sonst wie B
+## Tasten: 1 / 2 / 3 Variante, 4 / 5 Arbeits- bzw. Nahansicht.
 ## Aufruf mit `-- --variant=A --ansicht=nah --bench=<json> --screenshot=<png>` misst und beendet.
 
 const PH := "res://assets/external/polyhaven/"
 const B := "res://assets/style_b/"
+const C := "res://assets/style_c/"
+const LEAF_CARDS_SHADER := preload("res://src/style_test/leaf_cards.gdshader")
+const LEAF_ATLAS := preload("res://assets/style_c/leaf_atlas.png")
 
 const VARIANTS := {
 	"A": {
@@ -25,6 +29,15 @@ const VARIANTS := {
 		"title": "Variante B – in Blender angepasst und selbst gebaut",
 		"tree": {"paths": [B + "trees/tree_b_1.glb", B + "trees/tree_b_2.glb", B + "trees/tree_b_3.glb"], "size": 8.5, "mode": "whole"},
 		"shrub": {"paths": [B + "bushes/bush_b_1.glb", B + "bushes/bush_b_2.glb"], "size": 1.5, "mode": "whole"},
+		"rock": {"paths": [B + "rocks/rock_moss_set_02_b.glb", B + "rocks/boulder_01_b.glb", B + "rocks/rock_07_b.glb"], "size": 1.6, "mode": "set"},
+		"grass": {"paths": [B + "grass/grass_b_1.glb", B + "grass/grass_b_2.glb"], "size": 0.45, "mode": "whole"},
+		"terrain": {"tint": Vector3(1.04, 1.06, 0.86), "saturation": 1.3, "brightness": 1.08},
+		"own_materials": true,
+	},
+	"C": {
+		"title": "Variante C – Blattkarten-Bäume (Blender + Higgsfield-Laub)",
+		"tree": {"paths": [C + "trees/tree_c_1.glb", C + "trees/tree_c_2.glb", C + "trees/tree_c_3.glb"], "size": 8.5, "mode": "whole"},
+		"shrub": {"paths": [C + "bushes/bush_c_1.glb", C + "bushes/bush_c_2.glb"], "size": 1.5, "mode": "whole"},
 		"rock": {"paths": [B + "rocks/rock_moss_set_02_b.glb", B + "rocks/boulder_01_b.glb", B + "rocks/rock_07_b.glb"], "size": 1.6, "mode": "set"},
 		"grass": {"paths": [B + "grass/grass_b_1.glb", B + "grass/grass_b_2.glb"], "size": 0.45, "mode": "whole"},
 		"terrain": {"tint": Vector3(1.04, 1.06, 0.86), "saturation": 1.3, "brightness": 1.08},
@@ -112,8 +125,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		match (event as InputEventKey).physical_keycode:
 			KEY_1: show_variant("A")
 			KEY_2: show_variant("B")
-			KEY_3: show_view("arbeit")
-			KEY_4: show_view("nah")
+			KEY_3: show_variant("C")
+			KEY_4: show_view("arbeit")
+			KEY_5: show_view("nah")
 
 
 func _process(delta: float) -> void:
@@ -126,7 +140,7 @@ func _process(delta: float) -> void:
 func _update_label() -> void:
 	if label == null or variant == "":
 		return
-	label.text = "STILTEST · %s · %s · %d Bilder/s\n1 / 2 Variante wechseln · 3 / 4 Arbeits- oder Nahansicht" % [
+	label.text = "STILTEST · %s · %s · %d Bilder/s\n1 / 2 / 3 Variante A, B, C · 4 / 5 Arbeits- oder Nahansicht" % [
 		VARIANTS[variant]["title"], VIEWS[view]["title"], Engine.get_frames_per_second()]
 
 
@@ -210,7 +224,12 @@ func _with_own_materials(mesh: Mesh) -> Mesh:
 	for i in copy.get_surface_count():
 		var original := copy.surface_get_material(i)
 		var name := original.resource_name if original else ""
-		if name.begins_with("Leaves"):
+		if name.begins_with("LeafCards"):
+			var cards := ShaderMaterial.new()
+			cards.shader = LEAF_CARDS_SHADER
+			cards.set_shader_parameter("leaf_atlas", LEAF_ATLAS)
+			copy.surface_set_material(i, cards)
+		elif name.begins_with("Leaves"):
 			var m := ShaderMaterial.new()
 			m.shader = FOLIAGE_SHADER
 			copy.surface_set_material(i, m)

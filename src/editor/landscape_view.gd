@@ -13,7 +13,9 @@ const PLANE := 1000.0
 const SHADER := preload("res://src/editor/landscape.gdshader")
 const WATER_SHADER := preload("res://src/world/water.gdshader")
 const FOLIAGE_SHADER := preload("res://src/style_test/foliage.gdshader")
-const TREE_PATHS := ["res://assets/style_b/trees/tree_b_1.glb", "res://assets/style_b/trees/tree_b_2.glb", "res://assets/style_b/trees/tree_b_3.glb"]
+const TREE_PATHS := ["res://assets/style_c/trees/tree_c_1.glb", "res://assets/style_c/trees/tree_c_2.glb", "res://assets/style_c/trees/tree_c_3.glb"]
+const LEAF_CARDS_SHADER := preload("res://src/style_test/leaf_cards.gdshader")
+const LEAF_ATLAS := preload("res://assets/style_c/leaf_atlas.png")
 ## Bäume als einzelne Modelle erst ab diesem Ausschnitt (m) – darüber zeigt die Farbe den Wald.
 const TREES_BELOW := 3500.0
 const DETAILED_TREES_BELOW := 450.0
@@ -435,7 +437,12 @@ func _tree_options(detailed: bool) -> Array:
 				for s in mesh.get_surface_count():
 					var original := mesh.surface_get_material(s)
 					var name := original.resource_name if original else ""
-					if name.begins_with("Leaves"):
+					if name.begins_with("LeafCards"):
+						var cards := ShaderMaterial.new()
+						cards.shader = LEAF_CARDS_SHADER
+						cards.set_shader_parameter("leaf_atlas", LEAF_ATLAS)
+						mesh.surface_set_material(s, cards)
+					elif name.begins_with("Leaves"):
 						var leaf := ShaderMaterial.new()
 						leaf.shader = FOLIAGE_SHADER
 						mesh.surface_set_material(s, leaf)

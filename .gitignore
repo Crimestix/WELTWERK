@@ -7,6 +7,8 @@ export_credentials.cfg
 
 # Heruntergeladene Fremdbestände (per tools/fetch_polyhaven.ps1 wiederherstellbar)
 /assets/external/
+# Higgsfield-Originale (Laubatlas liegt als assets/style_c/leaf_atlas.png im Repository)
+/assets/style_c/source/
 
 # Erzeugte Programme
 /build/

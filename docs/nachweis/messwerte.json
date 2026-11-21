@@ -6,36 +6,44 @@
   ],
   "resolution": "(1440.0, 900.0)",
   "timing_ms": {
-    "30 Mausbewegungen beim Malen (je Bild)": 15.1837333333333,
-    "Kontur ändern (Kontinent neu berechnen)": 149.871,
-    "Vertiefen auf 200 km": 186.717,
-    "Vertiefen auf 25 km": 208.079,
-    "Zwei Striche im Ausschnitt (neu berechnen)": 1180.273
+    "30 Mausbewegungen beim Malen (je Bild)": 15.2566,
+    "Kontur ändern (Kontinent neu berechnen)": 158.898,
+    "Vertiefen auf 200 km": 193.828,
+    "Vertiefen auf 25 km": 216.198,
+    "Zwei Striche im Ausschnitt (neu berechnen)": 1245.194
   },
   "views": {
+    "Ausschnitt 1:4096 mit Blattkarten-Bäumen": {
+      "draw_calls": 86.0,
+      "fps": 107.777880565942,
+      "frame_ms": 9.27834166666667,
+      "primitives": 1332658.0,
+      "static_mem_mb": 81.6700048446655,
+      "video_mem_mb": 268.195053100586
+    },
     "Ausschnitt 1:512 mit Bäumen": {
       "draw_calls": 55.0,
-      "fps": 316.263035967014,
-      "frame_ms": 3.161925,
+      "fps": 300.374717460031,
+      "frame_ms": 3.329175,
       "primitives": 1626430.0,
-      "static_mem_mb": 79.5006999969482,
-      "video_mem_mb": 232.717437744141
+      "static_mem_mb": 80.2287855148315,
+      "video_mem_mb": 268.052886962891
     },
     "Globus": {
       "draw_calls": 48.0,
-      "fps": 611.066412734624,
-      "frame_ms": 1.63648333333333,
+      "fps": 564.092680427394,
+      "frame_ms": 1.77275833333333,
       "primitives": 744482.0,
-      "static_mem_mb": 75.3287620544434,
-      "video_mem_mb": 227.727172851563
+      "static_mem_mb": 76.0568475723267,
+      "video_mem_mb": 263.062622070313
     },
     "Kontinent": {
       "draw_calls": 52.0,
-      "fps": 381.530126572619,
-      "frame_ms": 2.621025,
+      "fps": 330.725197677207,
+      "frame_ms": 3.02365833333333,
       "primitives": 268688.0,
-      "static_mem_mb": 75.3414268493652,
-      "video_mem_mb": 227.727172851563
+      "static_mem_mb": 76.0695123672485,
+      "video_mem_mb": 263.062622070313
     },
     "Mit der Maus gemalt": {
       "strokes_after": 4,
@@ -43,11 +51,11 @@
     },
     "Region 1:64": {
       "draw_calls": 53.0,
-      "fps": 340.166908563135,
-      "frame_ms": 2.93973333333333,
+      "fps": 319.521995095337,
+      "frame_ms": 3.129675,
       "primitives": 923356.0,
-      "static_mem_mb": 80.9811935424805,
-      "video_mem_mb": 232.51432800293
+      "static_mem_mb": 81.7092790603638,
+      "video_mem_mb": 267.84977722168
     }
   },
   "world_file": "D:\\WELTWERK\\docs\\nachweis/welt.json"

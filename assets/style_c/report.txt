@@ -1,0 +1,6 @@
+tree_c_1: 998 Dreiecke, 73 KB
+tree_c_2: 1032 Dreiecke, 74 KB
+tree_c_3: 1176 Dreiecke, 86 KB
+bush_c_1: 178 Dreiecke
+bush_c_2: 178 Dreiecke
+Dauer: 3.0 s

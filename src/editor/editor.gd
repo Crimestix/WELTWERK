@@ -482,6 +482,15 @@ func _run_demo(dir: String) -> void:
 	await _shot(dir.path_join("12_mit_maus_gemalt.jpg"))
 	_on_tool("navigate")
 
+	# Feinste Stufe (1:4096, rund 390 m): einzelne Bäume aus Blattkarten.
+	var hit: Variant = camera_rig.ground_point_under(start + Vector2(14.0 * 15, -4.0 * 15))
+	if hit != null:
+		deepen_at(hit)
+		camera_rig.jump_to(Vector3.ZERO, camera_rig.min_distance * 2.5)
+		await _frames(20)
+		await _shot(dir.path_join("13_ausschnitt_390m.jpg"))
+		await _measure("Ausschnitt 1:4096 mit Blattkarten-Bäumen", results)
+
 	_save_now()
 	var report := {"views": results, "timing_ms": timing, "point": [p.x, p.y], "world_file": ProjectSettings.globalize_path(save_path),
 		"gpu": RenderingServer.get_video_adapter_name(), "resolution": str(get_viewport().get_visible_rect().size)}
