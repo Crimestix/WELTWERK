@@ -201,6 +201,8 @@ $godot = "C:\Users\Mattes\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-s
 & $godot --position 2000,60 --path D:\WELTWERK -- --welt=<welt.json> --stufen=<ordner> [--richtung=250]  # Bildreihe aller Stufen
 & $godot --position 2000,60 --path D:\WELTWERK -- --vergleich=<ordner>    # gleicher Umriss wie die Referenz, Bilder + Prüfungen
 & $godot --position 2000,60 --path D:\WELTWERK --write-movie <film.ogv> --fixed-fps 30 -- --aufnahme=<ordner>  # Bedienablauf filmen
+& $godot --position 2000,60 --path D:\WELTWERK -- --echtzeit=<ordner> [--ohne-bilder]   # Zoom-/Bearbeitungsablauf in Echtzeit aufnehmen
+python tools\make_video.py <ordner> [--out film.avi] [--kontaktbogen bogen.jpg]   # Film (MJPEG-AVI) mit sichtbaren Rechenpausen
 & $godot --path D:\WELTWERK res://scenes/style_test.tscn                         # Stiltest
 powershell -ExecutionPolicy Bypass -File tools\run_style_test.ps1                # Stiltest messen
 ```

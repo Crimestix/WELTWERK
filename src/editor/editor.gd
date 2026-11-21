@@ -9,8 +9,9 @@ extends Node3D
 ## --welt in einer eigenen Testdatei, nie in der Hauptwelt) · --demo=<Ordner> Ablauf vorführen ·
 ## --abnahme=<Ordner> Abnahmeablauf (Schritt über --schritt=1|2) · --vergleich=<Ordner> Vergleich mit
 ## der Kontinentalreferenz (ComparisonRun) · --aufnahme=<Ordner> Bedienablauf für eine Filmaufnahme
-## (RecordingRun, mit --write-movie) · --orte=<Ordner> Ortsprüfung: Gipfel, Pass, Tal auf allen
-## Stufen (LandmarkRun, Schritt über --schritt=1|2) · --screenshot=<Pfad>.
+## (RecordingRun, mit --write-movie) · --echtzeit=<Ordner> derselbe Gedanke in Echtzeit mit
+## sichtbaren Rechenpausen (RealtimeRun; Film: tools/make_video.py) · --orte=<Ordner> Ortsprüfung:
+## Gipfel, Pass, Tal auf allen Stufen (LandmarkRun, Schritt über --schritt=1|2) · --screenshot=<Pfad>.
 
 const DEFAULT_PATH := "user://welt.json"
 const FACTOR := 8.0
@@ -74,11 +75,14 @@ func _ready() -> void:
 	if _args.has("orte"):
 		save_path = _args["orte"].path_join("welt.json")
 		DirAccess.make_dir_recursive_absolute(_args["orte"])
+	if _args.has("echtzeit"):
+		save_path = _args["echtzeit"].path_join("welt.json")
+		DirAccess.make_dir_recursive_absolute(_args["echtzeit"])
 	if _args.has("neu") and not _args.has("welt") and not _args.has("demo") and not _args.has("abnahme"):
 		# Eine neue Welt zum Ausprobieren berührt nie die Hauptwelt.
 		save_path = "user://welt_neu.json"
 	save_path = _args.get("welt", save_path)
-	var fresh: bool = _args.has("neu") or _args.has("vergleich") or _args.has("aufnahme") 		or ((_args.has("abnahme") or _args.has("orte")) and _args.get("schritt", "1") == "1")
+	var fresh: bool = _args.has("neu") or _args.has("vergleich") or _args.has("aufnahme") or _args.has("echtzeit") 		or ((_args.has("abnahme") or _args.has("orte")) and _args.get("schritt", "1") == "1")
 
 	doc = null if fresh else WorldDocument.load_file(save_path)
 	if WorldDocument.load_problem != "":
@@ -170,6 +174,9 @@ func _ready() -> void:
 	elif _args.has("orte"):
 		_landmarks = LandmarkRun.new(self)
 		_landmarks.run(_args["orte"], _args.get("schritt", "1"))
+	elif _args.has("echtzeit"):
+		_recording = RealtimeRun.new(self)
+		_recording.run(_args["echtzeit"])
 	elif _args.has("stufen"):
 		_run_levels(_args["stufen"])
 	elif _args.has("abnahme"):
