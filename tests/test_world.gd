@@ -9,8 +9,21 @@ func _doc() -> WorldDocument:
 	return doc
 
 
+func _id(doc: WorldDocument) -> String:
+	return doc.continents[0]["id"]
+
+
 func _sampler(doc: WorldDocument) -> TerrainSampler:
 	return TerrainSampler.new(doc.continents[0], doc.planet)
+
+
+## Ein Meerespunkt innerhalb des Kontinentfensters (vor dem Randsaum), nach Osten gesucht.
+func _sea_inside(w: TerrainWindow, size: float) -> Vector2:
+	for s in 60:
+		var q := Vector2(size * (0.30 + 0.14 * s / 60.0), 0.0)
+		if w.height_at(q.x, q.y) < -20.0:
+			return q
+	return Vector2(size * 0.44, 0.0)
 
 
 func _painted(tool: String, x: float, y: float, radius: float, strength: float) -> Dictionary:
@@ -49,10 +62,10 @@ func test_generation_is_repeatable() -> void:
 func test_contour_change_carries_into_region() -> void:
 	var doc := _doc()
 	var size: float = doc.continents[0]["size_km"] * 1000.0
-	var sea := Vector2(size * 0.49, 0.0)
 	var before := _sampler(doc).window(0.0, 0.0, size, RES)
+	var sea := _sea_inside(before, size)
 	check(before.height_at(sea.x, sea.y) < 0.0, "Ausgangspunkt liegt im Meer")
-	doc.execute(WorldDocument.add_stroke_command(0, _painted("land_add", sea.x - size * 0.05, sea.y, size * 0.075, 1.0)))
+	doc.execute(WorldDocument.add_stroke_command(_id(doc), _painted("land_add", sea.x - size * 0.05, sea.y, size * 0.075, 1.0)))
 	var continent := _sampler(doc).window(0.0, 0.0, size, RES)
 	check(continent.height_at(sea.x, sea.y) > 0.0, "Kontur geändert: dort ist jetzt Land")
 	var region := _sampler(doc).window(sea.x, sea.y, 100000.0, RES)
@@ -66,8 +79,8 @@ func test_detail_edit_found_again_when_zooming_out() -> void:
 	var coarse_before := {}
 	for size in [12500.0, 100000.0, 800000.0]:
 		coarse_before[size] = _sampler(doc).window(p.x, p.y, size, RES)
-	doc.execute(WorldDocument.add_stroke_command(0, _painted("forest_add", p.x, p.y, 150.0, 1.0)))
-	doc.execute(WorldDocument.add_stroke_command(0, _painted("raise", p.x, p.y, 150.0, 40.0)))
+	doc.execute(WorldDocument.add_stroke_command(_id(doc), _painted("forest_add", p.x, p.y, 150.0, 1.0)))
+	doc.execute(WorldDocument.add_stroke_command(_id(doc), _painted("raise", p.x, p.y, 150.0, 40.0)))
 	var detail := _sampler(doc).window(p.x, p.y, 1562.5, RES)
 	check(detail.forest_at(p.x, p.y) > detail_before.forest_at(p.x, p.y) + 0.3, "Wald im Detail gemalt")
 	check(detail.height_at(p.x, p.y) > detail_before.height_at(p.x, p.y) + 30.0, "Höhe im Detail erhöht")
@@ -84,7 +97,7 @@ func test_undo_redo_includes_derived_changes() -> void:
 	var doc := _doc()
 	var p := Vector2(0.0, 0.0)
 	var original := _sampler(doc).window(p.x, p.y, 12500.0, RES)
-	doc.execute(WorldDocument.add_stroke_command(0, _painted("raise", p.x, p.y, 1500.0, 200.0)))
+	doc.execute(WorldDocument.add_stroke_command(_id(doc), _painted("raise", p.x, p.y, 1500.0, 200.0)))
 	var raised := _sampler(doc).window(p.x, p.y, 12500.0, RES)
 	check(raised.height != original.height, "Bearbeitung wirkt")
 	doc.undo()
@@ -96,19 +109,19 @@ func test_undo_redo_includes_derived_changes() -> void:
 
 func test_placement_change_is_undoable() -> void:
 	var doc := _doc()
-	doc.execute(doc.set_command(0, "latitude", 55.0))
-	doc.execute(doc.set_command(0, "climate_override.snowline_offset", -300.0))
-	check_near(doc.get_value(0, "latitude"), 55.0, 0.0001, "Breitengrad gesetzt")
+	doc.execute(doc.set_command(_id(doc), "latitude", 55.0))
+	doc.execute(doc.set_command(_id(doc), "climate_override.snowline_offset", -300.0))
+	check_near(doc.get_value(_id(doc), "latitude"), 55.0, 0.0001, "Breitengrad gesetzt")
 	doc.undo()
 	doc.undo()
-	check_near(doc.get_value(0, "latitude"), 35.0, 0.0001, "Breitengrad zurück")
-	check_near(doc.get_value(0, "climate_override.snowline_offset"), 0.0, 0.0001, "Klima zurück")
+	check_near(doc.get_value(_id(doc), "latitude"), 35.0, 0.0001, "Breitengrad zurück")
+	check_near(doc.get_value(_id(doc), "climate_override.snowline_offset"), 0.0, 0.0001, "Klima zurück")
 
 
 func test_save_and_load_keep_state() -> void:
 	var doc := _doc()
-	doc.execute(WorldDocument.add_stroke_command(0, _painted("forest_add", 100.0, 200.0, 300.0, 0.7)))
-	doc.execute(doc.set_command(0, "heading", 25.0))
+	doc.execute(WorldDocument.add_stroke_command(_id(doc), _painted("forest_add", 100.0, 200.0, 300.0, 0.7)))
+	doc.execute(doc.set_command(_id(doc), "heading", 25.0))
 	var path := "user://tests/welt_test.json"
 	check_equal(doc.save(path), OK, "speichern")
 	var loaded := WorldDocument.load_file(path)
@@ -125,8 +138,8 @@ func test_save_and_load_keep_state() -> void:
 func test_new_variant_keeps_hand_edits() -> void:
 	var doc := _doc()
 	var p := Vector2(5000.0, 5000.0)
-	doc.execute(WorldDocument.add_stroke_command(0, _painted("forest_add", p.x, p.y, 400.0, 1.0)))
-	doc.execute(doc.set_command(0, "seed", 99))
+	doc.execute(WorldDocument.add_stroke_command(_id(doc), _painted("forest_add", p.x, p.y, 400.0, 1.0)))
+	doc.execute(doc.set_command(_id(doc), "seed", 99))
 	var w := _sampler(doc).window(p.x, p.y, 12500.0, RES)
 	var g := w.grid_of(p.x, p.y)
 	check(w.forest_edit[int(round(g.y)) * w.res + int(round(g.x))] > 0.5, "Handarbeit bleibt bei neuer Variante erhalten")
@@ -136,11 +149,11 @@ func test_new_variant_keeps_hand_edits() -> void:
 func test_resize_carries_hand_edits_along() -> void:
 	var doc := _doc()
 	var size: float = doc.continents[0]["size_km"] * 1000.0
-	var sea := Vector2(size * 0.49, 0.0)
-	doc.execute(WorldDocument.add_stroke_command(0, _painted("land_add", sea.x - size * 0.05, sea.y, size * 0.075, 1.0)))
-	doc.remember_region(0, 1000.0, 2000.0, size / 8.0)
+	var sea := _sea_inside(_sampler(doc).window(0.0, 0.0, size, RES), size)
+	doc.execute(WorldDocument.add_stroke_command(_id(doc), _painted("land_add", sea.x - size * 0.05, sea.y, size * 0.075, 1.0)))
+	doc.remember_region(_id(doc), 1000.0, 2000.0, size / 8.0)
 	var before: Dictionary = doc.to_dict()
-	doc.execute(doc.resize_command(0, doc.continents[0]["size_km"] * 1.5))
+	doc.execute(doc.resize_command(_id(doc), doc.continents[0]["size_km"] * 1.5))
 	var stroke: Dictionary = doc.continents[0]["strokes"][0]
 	check_near(stroke["radius"], size * 0.075 * 1.5, 0.01, "Pinselgröße wächst mit")
 	check_near(stroke["points"][0], (sea.x - size * 0.05) * 1.5, 0.01, "Lage wächst mit")
@@ -161,7 +174,7 @@ func test_climate_follows_latitude_and_override() -> void:
 
 func test_window_timing() -> void:
 	var doc := _doc()
-	doc.execute(WorldDocument.add_stroke_command(0, _painted("forest_add", 0.0, 0.0, 300.0, 1.0)))
+	doc.execute(WorldDocument.add_stroke_command(_id(doc), _painted("forest_add", 0.0, 0.0, 300.0, 1.0)))
 	for size in [800000.0, 12500.0, 195.3]:
 		var started := Time.get_ticks_usec()
 		_sampler(doc).window(0.0, 0.0, size, 257)

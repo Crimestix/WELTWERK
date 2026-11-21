@@ -18,6 +18,10 @@ export_credentials.cfg
 
 # Spielstände, Kampagnen, Sicherungen, Schlüssel – nie einchecken
 /docs/nachweis/welt.json
+/docs/nachweis/*_ansicht.json
+/docs/abnahme/*.json
+*_ansicht.json
+*.defekt
 *.json.neu
 /saves/
 /campaigns/

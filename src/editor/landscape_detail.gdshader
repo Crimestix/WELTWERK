@@ -32,6 +32,8 @@ varying vec3 n_world;
 varying float height_m;
 varying float forest;
 varying float mark;
+varying float protect;
+varying float water;
 
 float h_at(ivec2 p) {
 	return texelFetch(data_tex, clamp(p, ivec2(0), ivec2(res - 1)), 0).r * height_scale;
@@ -61,11 +63,16 @@ void vertex() {
 	vec4 d = texelFetch(data_tex, p, 0);
 	height_m = d.r;
 	forest = d.g;
-	mark = d.b;
-	VERTEX.y = d.r * height_scale;
-	float step = plane_size / float(res - 1);
-	vec3 n = normalize(vec3(h_at(p + ivec2(-1, 0)) - h_at(p + ivec2(1, 0)), 2.0 * step,
+	protect = step(1.5, d.b);
+	mark = d.b - 2.0 * protect;
+	water = d.a;
+	VERTEX.y = (d.r + water) * height_scale;
+	float cell_r = plane_size / float(res - 1);
+	vec3 n = normalize(vec3(h_at(p + ivec2(-1, 0)) - h_at(p + ivec2(1, 0)), 2.0 * cell_r,
 		h_at(p + ivec2(0, -1)) - h_at(p + ivec2(0, 1))));
+	if (water > 0.05) {
+		n = vec3(0.0, 1.0, 0.0);
+	}
 	NORMAL = n;
 	n_world = normalize(MODEL_NORMAL_MATRIX * n);
 	world_pos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -107,6 +114,23 @@ void fragment() {
 	float snow_w = smoothstep(snowline - 150.0, snowline + 150.0, h + (macro - 0.5) * 400.0) * (1.0 - smoothstep(0.4, 0.6, slope));
 	c = mix(c, snow_color, snow_w);
 
+	// Binnengewässer (Fluss, See): klares Wasser über dem Grund, zur Tiefe hin blaugrün.
+	float rough_w = 0.0;
+	if (water > 0.03) {
+		float wd = water;
+		vec3 bottom = texture(bottom_albedo, xz / 3.5).rgb * exp(-vec3(0.42, 0.11, 0.07) * wd);
+		vec3 tint = mix(vec3(0.20, 0.52, 0.52), vec3(0.04, 0.17, 0.26), smoothstep(0.5, 8.0, wd));
+		vec3 wc = mix(bottom, tint, smoothstep(0.2, 6.0, wd) * 0.85);
+		wc += vec3(0.75, 0.9, 0.85) * caustics(xz * 0.9, TIME) * exp(-wd * 0.5) * 0.4;
+		float a = smoothstep(0.03, 0.4, wd);
+		c = mix(c, wc, a);
+		nn = mix(nn, vec3(0.0, 0.0, 1.0), a);
+		rough_w = a;
+	}
+	if (protect > 0.5) {
+		float stripes = step(0.82, fract((rxz.x + rxz.y) / (plane_size * 0.006)));
+		c = mix(c, brush_color, stripes * 0.25);
+	}
 	if (show_marks) {
 		float ring = smoothstep(0.30, 0.45, mark) - smoothstep(0.55, 0.70, mark);
 		c = mix(c, brush_color, ring * 0.85);
@@ -120,6 +144,6 @@ void fragment() {
 
 	ALBEDO = c;
 	NORMAL_MAP = normalize(nn + vec3(0.0, 0.0, 0.001)) * 0.5 + 0.5;
-	ROUGHNESS = mix(0.92, 0.45, max(wet, under));
+	ROUGHNESS = mix(mix(0.92, 0.45, max(wet, under)), 0.06, rough_w);
 	SPECULAR = 0.35;
 }

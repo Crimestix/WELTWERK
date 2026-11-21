@@ -35,9 +35,18 @@ var height_scale := 1.0
 var camera: Camera3D
 
 ## Aktives Werkzeug ("navigate" oder ein Stroke.TOOLS-Eintrag) und Pinsel in Metern.
-var tool := "navigate"
+var tool := "navigate":
+	set(value):
+		tool = value
+		_cancel_line()
+		if _material and value == "navigate":
+			_material.set_shader_parameter("brush", Vector3(0.0, 0.0, -1.0))
 var brush_radius_m := 100.0
 var brush_strength := 1.0
+## Ausgangswert für die nächste erzeugende Bearbeitung (vom Editor fest abgeleitet).
+var generator_seed := 0
+## Ausgangswert der Grundform (für Schutzbereiche: diese Grundform bleibt dort erhalten).
+var continent_seed := 0
 var show_marks := true:
 	set(value):
 		show_marks = value
@@ -65,6 +74,11 @@ var _peak := PackedFloat32Array()
 var _painting := false
 var _tree_meshes: Array = []
 var _blob_mesh: Mesh
+## Linienwerkzeuge (Umriss, Fluss): gesammelte Punkte in Kontinentmetern und Vorschau.
+var _line := PackedVector2Array()
+var _drawing_line := false
+var _line_preview: MeshInstance3D
+var _lin_texture: ImageTexture
 
 
 func _ready() -> void:
@@ -125,6 +139,17 @@ func _ready() -> void:
 	frame_material.albedo_color = Color(0.88, 0.70, 0.38)
 	_frames.material_override = frame_material
 	add_child(_frames)
+
+	_line_preview = MeshInstance3D.new()
+	_line_preview.name = "LinePreview"
+	_line_preview.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var line_material := StandardMaterial3D.new()
+	line_material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	line_material.albedo_color = Color(1.0, 0.82, 0.45)
+	line_material.no_depth_test = true
+	line_material.render_priority = 10
+	_line_preview.material_override = line_material
+	add_child(_line_preview)
 
 
 ## Zeigt einen Ausschnitt. regions: gemerkte vertiefte Ausschnitte (als Rahmen gezeigt).
@@ -215,14 +240,28 @@ func world_rect() -> Rect2:
 
 # --- Malen ---------------------------------------------------------------------------------
 
+## Läuft gerade ein Strich oder eine Linie? (Dann kein Rückgängig und kein Maßstabswechsel.)
+func is_busy() -> bool:
+	return _painting or _drawing_line
+
+
+static func is_line_tool(t: String) -> bool:
+	return t in ["shape_add", "shape_remove", "river"]
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if window == null or not visible:
 		return
 	if event is InputEventMouseMotion:
 		var hit: Variant = _hit((event as InputEventMouseMotion).position)
 		_update_brush(hit)
-		if _painting and hit != null:
+		if hit == null:
+			return
+		if _painting:
 			_continue_stroke(hit)
+			get_viewport().set_input_as_handled()
+		elif _drawing_line:
+			_continue_line(hit)
 			get_viewport().set_input_as_handled()
 	elif event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
 		var button := event as InputEventMouseButton
@@ -230,12 +269,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if button.pressed:
 			var hit: Variant = _hit(button.position)
-			if hit != null:
+			if hit == null:
+				return
+			if is_line_tool(tool):
+				_start_line(hit)
+			elif tool == "lake":
+				_place_lake(hit)
+			else:
 				_start_stroke(hit)
-				get_viewport().set_input_as_handled()
+			get_viewport().set_input_as_handled()
 		elif _painting:
 			_finish_stroke()
 			get_viewport().set_input_as_handled()
+		elif _drawing_line:
+			_finish_line()
+			get_viewport().set_input_as_handled()
+	elif event is InputEventKey and event.pressed and (event as InputEventKey).keycode == KEY_ESCAPE and _drawing_line:
+		_cancel_line()
+		get_viewport().set_input_as_handled()
 
 
 func _hit(screen_position: Vector2) -> Variant:
@@ -250,17 +301,125 @@ func _update_brush(hit: Variant) -> void:
 		hover_changed.emit(0.0, 0.0, false)
 		return
 	var p: Vector3 = hit
-	_material.set_shader_parameter("brush", Vector3(p.x, p.z, brush_radius_m * units_per_m))
+	# Umriss-Werkzeuge: nur ein kleiner Punkt als Zeiger; sonst der Pinselkreis in echter Größe.
+	var r := brush_radius_m * units_per_m
+	if tool in ["shape_add", "shape_remove"]:
+		r = PLANE * 0.004
+	_material.set_shader_parameter("brush", Vector3(p.x, p.z, r))
 	hover_changed.emit(continent_x(p), continent_y(p), true)
 
 
 func _start_stroke(hit: Vector3) -> void:
-	_stroke = Stroke.create(tool, brush_radius_m, brush_strength)
+	var x := continent_x(hit)
+	var y := continent_y(hit)
+	match tool:
+		"gen_mountains", "gen_hills", "gen_forest", "gen_islands":
+			_stroke = Stroke.create_generated(tool, brush_radius_m, brush_strength, generator_seed)
+		"protect":
+			_stroke = Stroke.create_generated("protect", brush_radius_m, 1.0, continent_seed)
+		"flatten":
+			_stroke = Stroke.create("flatten", brush_radius_m, 0.9)
+			_stroke["level"] = maxf(window.height_at(x, y), 0.5)
+		_:
+			_stroke = Stroke.create(tool, brush_radius_m, brush_strength)
 	_peak.resize(window.res * window.res)
 	_peak.fill(0.0)
 	_painting = true
-	Stroke.add_point(_stroke, continent_x(hit), continent_y(hit))
+	Stroke.add_point(_stroke, x, y)
 	_apply_new_dabs(0)
+
+
+# --- Linien: Umriss und Fluss ----------------------------------------------------------------
+
+func _start_line(hit: Vector3) -> void:
+	_line = PackedVector2Array([to_continent(hit)])
+	_drawing_line = true
+	_draw_line_preview()
+
+
+func _continue_line(hit: Vector3) -> void:
+	var p := to_continent(hit)
+	if p.distance_to(_line[_line.size() - 1]) >= window.size * 0.004:
+		_line.append(p)
+		_draw_line_preview()
+
+
+func _cancel_line() -> void:
+	_drawing_line = false
+	_line = PackedVector2Array()
+	if _line_preview:
+		_line_preview.mesh = null
+
+
+func _finish_line() -> void:
+	var line := _line
+	var t := tool
+	_cancel_line()
+	if t == "river":
+		if line.size() < 2:
+			return
+		stroke_finished.emit(make_river(window, line, brush_radius_m))
+		return
+	if line.size() < 3:
+		return
+	# Rand: sichtbar weich, aber im Verhältnis zum Ausschnitt schmal.
+	var edge := maxf(window.size * 0.012, window.cell * 1.5)
+	stroke_finished.emit(Stroke.create_shape(t == "shape_add", line, edge))
+
+
+## Fluss aus einem gezogenen Linienzug: Er fließt vom höheren zum tieferen Ende; der Spiegel
+## liegt knapp unter dem Gelände und steigt flussabwärts nie an (Stroke.create_river).
+static func make_river(w: TerrainWindow, line: PackedVector2Array, half_width: float) -> Dictionary:
+	var path := line
+	if w.height_at(path[0].x, path[0].y) < w.height_at(path[path.size() - 1].x, path[path.size() - 1].y):
+		path.reverse()
+	var depth := clampf(half_width * 0.15, 0.8, 25.0)
+	var levels := PackedFloat32Array()
+	for p in path:
+		levels.append(w.height_at(p.x, p.y) - minf(depth * 0.4, 3.0))
+	return Stroke.create_river(path, levels, half_width, depth)
+
+
+## See: Spiegel knapp unter dem niedrigsten Ufer – so schwebt kein Wasser am Hang.
+func _place_lake(hit: Vector3) -> void:
+	var c := to_continent(hit)
+	var lake := make_lake(window, c, brush_radius_m)
+	if lake.is_empty():
+		return
+	stroke_finished.emit(lake)
+
+
+static func make_lake(w: TerrainWindow, c: Vector2, radius: float) -> Dictionary:
+	var rim := INF
+	for k in 32:
+		var a := TAU * k / 32.0
+		var q := c + Vector2(cos(a), sin(a)) * radius * 1.1
+		rim = minf(rim, w.height_at(q.x, q.y))
+	var level := rim - 0.3
+	if level < 0.5:
+		# Am Meer: ein See auf Meereshöhe wäre Meer – trotzdem anlegen, knapp darüber.
+		level = maxf(w.height_at(c.x, c.y) - 0.5, 0.5)
+	var depth := clampf(radius * 0.04, 2.0, 80.0)
+	var lake := Stroke.create_lake(radius, level, depth)
+	Stroke.add_point(lake, c.x, c.y)
+	return lake
+
+
+func _draw_line_preview() -> void:
+	var mesh := ImmediateMesh.new()
+	if _line.size() >= 2:
+		mesh.surface_begin(Mesh.PRIMITIVE_LINE_STRIP)
+		for p in _line:
+			mesh.surface_add_vertex(_line_point(p))
+		if tool in ["shape_add", "shape_remove"]:
+			mesh.surface_add_vertex(_line_point(_line[0]))
+		mesh.surface_end()
+	_line_preview.mesh = mesh if _line.size() >= 2 else null
+
+
+func _line_point(p: Vector2) -> Vector3:
+	var h := maxf(window.height_at(p.x, p.y), maxf(window.water_level_at(p.x, p.y), 0.0))
+	return Vector3((p.x - window.cx) * units_per_m, h * height_scale + 0.6, -(p.y - window.cy) * units_per_m)
 
 
 func _continue_stroke(hit: Vector3) -> void:
@@ -298,6 +457,7 @@ func _upload() -> void:
 		_material.set_shader_parameter("data_tex", _texture)
 	else:
 		_texture.update(image)
+	_material.set_shader_parameter("data_lin", _texture)
 	# Grenzen für die Sichtbarkeitsprüfung (das Gitter wird erst im Shader gehoben).
 	var low := 0.0
 	var high := 0.0
@@ -326,6 +486,7 @@ func _show_context(parent: TerrainWindow) -> void:
 	_context.scale = Vector3(factor, 1.0, factor)
 	_context_texture = ImageTexture.create_from_image(_data_image(parent))
 	_context_material.set_shader_parameter("data_tex", _context_texture)
+	_context_material.set_shader_parameter("data_lin", _context_texture)
 	_context_material.set_shader_parameter("res", parent.res)
 	_context_material.set_shader_parameter("plane_size", PLANE)
 	_context_material.set_shader_parameter("height_scale", height_scale)
@@ -343,26 +504,33 @@ func _show_context(parent: TerrainWindow) -> void:
 	_context.visible = true
 
 
+## Datentextur: R Höhe (m), G Wald, B Bearbeitungsmarke + 2 wo geschützt, A Tiefe eines
+## Binnengewässers (m über dem Grund; 0 = keins).
 static func _data_image(w: TerrainWindow) -> Image:
 	var n := w.res * w.res
 	var data := PackedFloat32Array()
-	data.resize(n * 3)
+	data.resize(n * 4)
 	var h := w.height
 	var f := w.forest
 	var m := w.edit_marks
+	var p := w.protect
+	var lvl := w.water_level
 	for k in n:
-		data[k * 3] = h[k]
-		data[k * 3 + 1] = f[k]
-		data[k * 3 + 2] = m[k]
-	return Image.create_from_data(w.res, w.res, false, Image.FORMAT_RGBF, data.to_byte_array())
+		data[k * 4] = h[k]
+		data[k * 4 + 1] = f[k]
+		data[k * 4 + 2] = m[k] + (2.0 if p[k] > 0.5 else 0.0)
+		data[k * 4 + 3] = maxf(lvl[k] - h[k], 0.0) if lvl[k] > 0.0 else 0.0
+	return Image.create_from_data(w.res, w.res, false, Image.FORMAT_RGBAF, data.to_byte_array())
 
 
 func _rebuild_field() -> void:
 	var field := Heightfield.new(window.res, window.res, PLANE / float(window.res - 1))
 	var heights := field.heights
 	var h := window.height
+	var lvl := window.water_level
 	for k in window.res * window.res:
-		heights[k] = h[k] * height_scale
+		# Seen und Flüsse zählen als Boden (man malt auf der Wasserfläche).
+		heights[k] = maxf(h[k], lvl[k]) * height_scale
 	field.heights = heights
 	_field = field
 
@@ -399,7 +567,7 @@ func _build_trees() -> void:
 	var detailed := window.size <= DETAILED_TREES_BELOW
 	var spacing := 5.0 if detailed else (9.0 if window.size <= 2200.0 else 12.0)
 	var options := _tree_options(detailed)
-	var seed_value: int = sampler.continent["seed"]
+	var seed_value: int = sampler.continent.get("scatter_seed", sampler.continent["seed"])
 	var half := window.size * 0.5
 	var gx0 := int(floor((window.cx - half) / spacing))
 	var gx1 := int(ceil((window.cx + half) / spacing))
@@ -483,7 +651,7 @@ func _build_details() -> void:
 		child.queue_free()
 	if window.size > DETAILED_TREES_BELOW:
 		return
-	var seed_value: int = sampler.continent["seed"]
+	var seed_value: int = sampler.continent.get("scatter_seed", sampler.continent["seed"])
 	var u := units_per_m
 	var rocks := [[], []]
 	var bushes := [[], [], []]
@@ -527,7 +695,7 @@ func _build_details() -> void:
 
 ## Geht ein Weltgitter (Abstand spacing in m) im Ausschnitt durch; Punkt je Zelle fest verschoben.
 func _scan(spacing: float, salt: int, visit: Callable) -> void:
-	var seed_value: int = sampler.continent["seed"]
+	var seed_value: int = sampler.continent.get("scatter_seed", sampler.continent["seed"])
 	var half := window.size * 0.5
 	for gy in range(int(floor((window.cy - half) / spacing)), int(ceil((window.cy + half) / spacing)) + 1):
 		for gx in range(int(floor((window.cx - half) / spacing)), int(ceil((window.cx + half) / spacing)) + 1):
