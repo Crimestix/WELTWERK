@@ -446,7 +446,7 @@ func _show_level() -> void:
 	# Karte (grobe Ausschnitte): fast neutrales Licht, damit Farben wie auf einer Landkarte lesbar
 	# sind; nah die warme Abendsonne der Zielszene.
 	var sun: DirectionalLight3D = $Lighting/Sun
-	sun.light_color = Color(1.0, 0.93, 0.82) if current["size"] > LandscapeView.DETAIL_BELOW else Color(1.0, 0.8, 0.54)
+	sun.light_color = Color(1.0, 0.96, 0.9) if current["size"] > LandscapeView.DETAIL_BELOW else Color(1.0, 0.8, 0.54)
 	landscape.show_window(w, sampler, continent()["regions"], parent)
 	ui.set_window_size(current["size"])
 	_on_brush(size_fraction, strength)

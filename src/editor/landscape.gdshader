@@ -29,8 +29,8 @@ uniform vec3 brush_color : source_color = vec3(0.88, 0.70, 0.38);
 uniform bool is_context = false;
 uniform vec4 hole = vec4(0.0);
 
-uniform vec3 map_meadow_light : source_color = vec3(0.47, 0.56, 0.19);
-uniform vec3 map_meadow_mid : source_color = vec3(0.34, 0.46, 0.14);
+uniform vec3 map_meadow_light : source_color = vec3(0.42, 0.54, 0.18);
+uniform vec3 map_meadow_mid : source_color = vec3(0.30, 0.44, 0.13);
 uniform vec3 lush_color : source_color = vec3(0.23, 0.39, 0.11);
 uniform vec3 highland_color : source_color = vec3(0.52, 0.49, 0.31);
 uniform vec3 steppe_color : source_color = vec3(0.71, 0.60, 0.33);
@@ -59,7 +59,17 @@ uniform sampler2D erosion_alpine_normal : hint_normal, filter_linear_mipmap_anis
 uniform sampler2D erosion_alpine_masks : hint_default_black, filter_linear_mipmap, repeat_enable;
 uniform sampler2D erosion_hills_normal : hint_normal, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform sampler2D erosion_hills_masks : hint_default_black, filter_linear_mipmap, repeat_enable;
-// Kachelbreite in Bildpunkten (die Kachel folgt dem Zoom in Zweierschritten).
+// Lage der Erosionskacheln in der Welt (wie ErosionField.placements): je Größe (Texel je Meter,
+// cos, sin, Anteil) und Versatz in Texeln; dazu die Formel der Höhen (TerrainWindow).
+uniform vec4 relief_alp[3];
+uniform vec2 relief_alp_off[3];
+uniform vec4 relief_hil[2];
+uniform vec2 relief_hil_off[2];
+uniform float relief_base_scale = 1.0;
+uniform float grid_cell_m = 3000.0;
+uniform float mountain_foot = 250.0;
+uniform float carve = 1.05;
+uniform float foothill_relief = 260.0;
 uniform float detail_px = 260.0;
 uniform float relief_strength = 1.0;
 uniform float rock_px = 320.0;
@@ -169,6 +179,36 @@ vec2 relief(sampler2D nmap, sampler2D masks, vec2 m, float px_m, float px, float
 	return grad;
 }
 
+// Kachelkoordinate (0–1 je Kachel) eines Kontinentpunkts für eine Kachelgröße.
+vec2 geo_uv(vec4 r, vec2 off, vec2 p) {
+	return (vec2(p.x * r.y - p.y * r.z, p.x * r.z + p.y * r.y) * r.x + off) / 1024.0;
+}
+
+// Steigung des Kachelanteils feiner als das Raster (Meter Kachelhöhe je Meter, mal 0–1-Skala):
+// Abtastung in Pixelfeinheit minus Abtastung in Rasterfeinheit. scale: Umrechnung der in der
+// Normalenkarte gespeicherten Neigung auf die 0–1-Kachelhöhe je Meter Kachelgröße.
+vec2 geo_gradient(sampler2D nmap, vec4 r, vec2 off, vec2 p, float px, float cell, float scale) {
+	vec2 uv = geo_uv(r, off, p);
+	float lod_px = max(log2(max(px * r.x, 1e-6)), 0.0);
+	float lod_grid = max(log2(max(2.0 * cell * r.x, 1e-6)), 0.0);
+	if (lod_px >= lod_grid) {
+		return vec2(0.0);
+	}
+	vec2 a = textureLod(nmap, uv, lod_px).xy * 2.0 - 1.0;
+	vec2 b = textureLod(nmap, uv, lod_grid).xy * 2.0 - 1.0;
+	// Normale → Neigung in Kachelrichtung (u nach rechts, v nach unten im Bild).
+	vec2 sa = vec2(-a.x, a.y) / sqrt(max(1.0 - dot(a, a), 0.04));
+	vec2 sb = vec2(-b.x, b.y) / sqrt(max(1.0 - dot(b, b), 0.04));
+	vec2 d = (sa - sb) * scale * r.x / 1024.0;
+	// Zurück in Weltachsen (Kachel = Drehung der Welt).
+	return vec2(d.x * r.y + d.y * r.z, -d.x * r.z + d.y * r.y);
+}
+
+vec4 geo_masks(sampler2D masks, vec4 r, vec2 off, vec2 p, float px) {
+	vec2 uv = geo_uv(r, off, p);
+	return textureLod(masks, uv, max(log2(max(px * r.x, 1e-6)), 0.0));
+}
+
 // Luftbild-Textur in festen Metern, Kachel etwa px Bildpunkte, zwei Zoomstufen überblendet; je
 // Stufe zwei gedrehte Abtastungen, von großem Rauschen gemischt (bricht Wiederholungsmuster).
 vec3 tex_world(sampler2D tex, vec2 m, float px_m, float px, float salt) {
@@ -233,27 +273,41 @@ void fragment() {
 	float px_m = max(length(fwidth(m)), 0.001);
 	float land = step(0.0, height_f);
 
-	// --- Reliefdetail aus den Erosionskacheln -------------------------------------------------------
-	// Unter der Rasterweite (Kontinent ≈ 3 km) fehlt jedes Kleinrelief. Die Kacheln liefern Grate,
-	// Rinnen und Schuttfächer als Darstellung (Material), nicht als Geografie; ihre Größe folgt dem
-	// Zoom in festen Metern (zwei Stufen überblendet), so bleibt das Relief etwa 10–40 Bildpunkte grob.
+	// --- Geografisches Erosionsrelief ---------------------------------------------------------------
+	// Grate und Täler sind Teil der Höhen (TerrainWindow/ErosionField) und damit in jedem Maßstab am
+	// selben Ort. Hier kommt nur der Anteil hinzu, der feiner als das Raster ist: dieselbe Kachel in
+	// derselben Weltlage, als Normale, und zwar Pixelauflösung minus Rasterauflösung – so verdoppelt
+	// sich nichts, und beim Vertiefen wird genau dieses Kleinrelief zu Geometrie.
 	float mountain = clamp(smoothstep(450.0, 1700.0, height_f) * 0.75 + smoothstep(0.05, 0.3, slope) * 0.5, 0.0, 1.0) * land;
-	float upland = smoothstep(120.0, 600.0, height_f) * (1.0 - mountain) * land;
-	// Nur rechnen, wo es wirkt (Ebenen und Meer sparen die Abtastungen).
+	float above = max(height_f - mountain_foot, 0.0);
+	float foothill_w = smoothstep(40.0, 350.0, height_f) * (1.0 - smoothstep(900.0, 1800.0, height_f)) * land;
+	vec2 geo = vec2(m.x, -m.y) * relief_base_scale;   // Kontinentmeter (x Osten, y Norden) der Grundform
+	vec2 g_world = vec2(0.0);                           // dh/dx, dh/dy in Metern je Meter
 	vec4 alp = vec4(0.0);
-	vec2 g_alp = vec2(0.0);
-	if (mountain > 0.001) {
-		g_alp = relief(erosion_alpine_normal, erosion_alpine_masks, m, px_m, detail_px, 0.0, alp);
-	}
 	vec4 hil = vec4(0.0);
-	vec2 g_hil = vec2(0.0);
-	if (upland > 0.001) {
-		g_hil = relief(erosion_hills_normal, erosion_hills_masks, m, px_m, detail_px * 0.8, 3.0, hil);
+	float px_geo = px_m * relief_base_scale;
+	float cell_geo = grid_cell_m * relief_base_scale;
+	if (above > 1.0) {
+		for (int k = 0; k < 3; k++) {
+			vec2 gk = geo_gradient(erosion_alpine_normal, relief_alp[k], relief_alp_off[k], geo, px_geo, cell_geo, 9.6);
+			g_world += gk * above * carve * 2.0 * relief_alp[k].w;
+			alp += geo_masks(erosion_alpine_masks, relief_alp[k], relief_alp_off[k], geo, px_geo) * relief_alp[k].w;
+		}
 	}
-	vec2 g = g_alp * mountain * relief_strength + g_hil * upland * relief_strength * 0.5;
-	vec3 nd = normalize(n - vec3(g.x, 0.0, g.y));
+	if (foothill_w > 0.001) {
+		for (int k = 0; k < 2; k++) {
+			vec2 gk = geo_gradient(erosion_hills_normal, relief_hil[k], relief_hil_off[k], geo, px_geo, cell_geo, 24.0);
+			g_world += gk * foothill_relief * foothill_w * relief_hil[k].w;
+			hil += geo_masks(erosion_hills_masks, relief_hil[k], relief_hil_off[k], geo, px_geo) * relief_hil[k].w;
+		}
+	}
+	// In Darstellungseinheiten (Überhöhung) und auf die glatte Geländenormale aufsetzen.
+	vec2 g_disp = g_world * height_scale / meadow_scale * relief_strength;
+	vec3 n_raw = n / max(n.y, 0.05);
+	vec3 nd = normalize(vec3(n_raw.x - g_disp.x, 1.0, n_raw.z + g_disp.y));
 	float d_slope = 1.0 - nd.y;
-	// Rinnen (Abfluss) und Grate der Kachel, gewichtet nach Gebirge/Hügelland.
+	float upland = foothill_w * (1.0 - mountain);
+	// Rinnen (Abfluss) und Grate derselben Kachel in derselben Lage – geografisch, nicht Muster.
 	float gully = alp.r * mountain + hil.r * upland * 0.7;
 	float crest = alp.g * mountain + hil.g * upland * 0.6;
 	float steep = alp.b * mountain;
@@ -280,9 +334,10 @@ void fragment() {
 		// Tiefland grün wie in der Referenz, die Textur liefert Mosaik und Gebüsch.
 		vec3 meadow = tex_world(tex_meadow, m, px_m, meadow_px, 5.0);
 		vec3 dry = tex_world(tex_dry, m, px_m, meadow_px, 11.0);
-		grass = mix(dry, meadow, smoothstep(0.0, 0.3, moist + (mottle - 0.5) * 0.25));
+		grass = mix(dry, meadow, smoothstep(-0.15, 0.2, moist + (mottle - 0.5) * 0.25));
 		float lum = dot(grass, vec3(0.3, 0.55, 0.15));
-		grass = mix(grass, painted * (lum / max(dot(painted, vec3(0.3, 0.55, 0.15)), 0.01)), 0.45);
+		// Grüner als das Luftbild allein (das Mosaik behält seine Helligkeit).
+		grass = mix(grass, painted * (lum / max(dot(painted, vec3(0.3, 0.55, 0.15)), 0.01)), 0.6);
 	} else {
 		grass = painted * (0.84 + 0.2 * speck + 0.14 * mottle);
 	}

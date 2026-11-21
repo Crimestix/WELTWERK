@@ -34,6 +34,9 @@ var climate: Dictionary
 var drawn: bool
 
 var _noises: Dictionary
+## Lage des Erosionsreliefs in diesem Kontinent (fest aus dem Streu-Ausgangswert).
+var _relief_alpine: Array
+var _relief_hills: Array
 ## Rauschen für Küstendetail gezeichneter Formen und Seeufer – fest je Kontinent (Streuung),
 ## bleibt also bei „Variante erzeugen“ gleich.
 var _detail: Dictionary
@@ -54,6 +57,9 @@ func _init(p_continent: Dictionary, p_planet: Dictionary) -> void:
 	drawn = continent.get("base", WorldDocument.BASE_GENERATED) == WorldDocument.BASE_DRAWN
 	base_scale = float(continent.get("base_size_km", continent["size_km"])) / float(continent["size_km"])
 	_noises = noise_set(continent["seed"])
+	var relief_seed := int(continent.get("scatter_seed", continent["seed"]))
+	_relief_alpine = ErosionField.placements(ErosionField.ALPINE_SCALES, relief_seed)
+	_relief_hills = ErosionField.placements(ErosionField.HILLS_SCALES, FixedRandom.derive(relief_seed, "Vorberge"))
 	_detail = noise_set(FixedRandom.derive(int(continent.get("scatter_seed", continent["seed"])), "Küstenform"))
 
 
@@ -113,6 +119,11 @@ static var _base_cache := {}
 static var _base_order: Array = []
 
 
+## Lage des Erosionsreliefs (für die Darstellung des Anteils feiner als das Raster).
+func relief_placements() -> Dictionary:
+	return {"alpine": _relief_alpine, "hills": _relief_hills, "base_scale": base_scale}
+
+
 func _base_key(w: TerrainWindow) -> String:
 	var protects := []
 	for stroke in continent["strokes"]:
@@ -136,11 +147,14 @@ func _evaluate_base_cached(w: TerrainWindow) -> void:
 		w.relief_low = (hit[1] as PackedFloat32Array).duplicate()
 		w.relief_detail = (hit[2] as PackedFloat32Array).duplicate()
 		w.base_forest = (hit[3] as PackedFloat32Array).duplicate()
+		w.erosion_alpine = (hit[4] as PackedFloat32Array).duplicate()
+		w.erosion_hills = (hit[5] as PackedFloat32Array).duplicate()
 		_base_order.erase(key)
 		_base_order.append(key)
 		return
 	evaluate_base(w)
-	_base_cache[key] = [w.base_land.duplicate(), w.relief_low.duplicate(), w.relief_detail.duplicate(), w.base_forest.duplicate()]
+	_base_cache[key] = [w.base_land.duplicate(), w.relief_low.duplicate(), w.relief_detail.duplicate(), w.base_forest.duplicate(),
+		w.erosion_alpine.duplicate(), w.erosion_hills.duplicate()]
 	_base_order.append(key)
 	while _base_order.size() > BASE_CACHE_SIZE:
 		_base_cache.erase(_base_order.pop_front())
@@ -189,6 +203,9 @@ static func _fade(lambda: float, cell: float) -> float:
 func evaluate_base(w: TerrainWindow) -> void:
 	_rows.clear()
 	_rows.resize(w.res)
+	# Pyramiden im Hauptfaden laden (einmal je Programmlauf).
+	ErosionField.pyramid("alpine")
+	ErosionField.pyramid("hills")
 	var task := WorkerThreadPool.add_group_task(_base_row.bind(w), w.res, -1, true, "Weltwerk Gelände")
 	WorkerThreadPool.wait_for_group_task_completion(task)
 	# Zusammensetzen im Hauptfaden, in lokale Felder, dann einmal zuweisen (keine Kopie je Wert).
@@ -196,6 +213,8 @@ func evaluate_base(w: TerrainWindow) -> void:
 	var low := w.relief_low
 	var detail := w.relief_detail
 	var forest := w.base_forest
+	var alpine := w.erosion_alpine
+	var hills := w.erosion_hills
 	var res := w.res
 	for j in res:
 		var row: Array = _rows[j]
@@ -205,6 +224,10 @@ func evaluate_base(w: TerrainWindow) -> void:
 			low[offset + i] = row[1][i]
 			detail[offset + i] = row[2][i]
 			forest[offset + i] = row[3][i]
+			alpine[offset + i] = row[4][i]
+			hills[offset + i] = row[5][i]
+	w.erosion_alpine = alpine
+	w.erosion_hills = hills
 	_rows.clear()
 
 	# Geschützte Bereiche behalten die Grundform des Ausgangswerts, der beim Schützen galt.
@@ -238,11 +261,17 @@ func _base_row(j: int, w: TerrainWindow) -> void:
 	var low := PackedFloat32Array()
 	var detail := PackedFloat32Array()
 	var forest := PackedFloat32Array()
+	var alpine := PackedFloat32Array()
+	var hills := PackedFloat32Array()
 	land.resize(res)
 	low.resize(res)
 	detail.resize(res)
 	forest.resize(res)
+	alpine.resize(res)
+	hills.resize(res)
 	var s := base_scale
+	var alp := ErosionField.prepare(ErosionField.pyramid("alpine"), _relief_alpine, w.cell * s)
+	var hil := ErosionField.prepare(ErosionField.pyramid("hills"), _relief_hills, w.cell * s)
 	var y := w.y_at(j) * s
 	var half: float = continent["size_km"] * 500.0 * s
 	var dryness: float = climate["dryness"]
@@ -252,8 +281,17 @@ func _base_row(j: int, w: TerrainWindow) -> void:
 		low[i] = sample[1]
 		detail[i] = sample[2]
 		forest[i] = sample[3]
+		# Erosionsrelief jede zweite Spalte (es ist auf mindestens zwei Zellen geglättet),
+		# dazwischen linear – halbiert die Rechenzeit ohne sichtbaren Unterschied.
+		if i % 2 == 0 or i == res - 1:
+			var x := w.x_at(i) * s
+			alpine[i] = ErosionField.value_prepared(alp, x, y)
+			hills[i] = ErosionField.value_prepared(hil, x, y)
+	for i in range(1, res - 1, 2):
+		alpine[i] = (alpine[i - 1] + alpine[i + 1]) * 0.5
+		hills[i] = (hills[i - 1] + hills[i + 1]) * 0.5
 	_mutex.lock()
-	_rows[j] = [land, low, detail, forest]
+	_rows[j] = [land, low, detail, forest, alpine, hills]
 	_mutex.unlock()
 
 

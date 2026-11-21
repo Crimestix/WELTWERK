@@ -250,6 +250,7 @@ func show_window(w: TerrainWindow, p_sampler: TerrainSampler, regions: Array, pa
 	_material.set_shader_parameter("canopy", 0.0 if w.size <= TREES_BELOW else 1.0)
 	_material.set_shader_parameter("show_marks", show_marks)
 	_material.set_shader_parameter("show_protect", tool == "protect")
+	_apply_relief(_coarse_material, w)
 	_rebuild_field()
 	_build_inland_water(detail)
 	_build_trees()
@@ -580,6 +581,31 @@ static func _apply_map_assets(material: ShaderMaterial) -> void:
 			material.set_shader_parameter(slot, tex)
 
 
+## Lage des geografischen Erosionsreliefs an das Kartenmaterial geben (gleiche Formel wie
+## TerrainWindow.compose_rect, damit Schattierung und Höhen dieselben Grate zeigen).
+func _apply_relief(material: ShaderMaterial, w: TerrainWindow) -> void:
+	if sampler == null:
+		return
+	var placed := sampler.relief_placements()
+	for key in [["alpine", "relief_alp"], ["hills", "relief_hil"]]:
+		var list: Array = placed[key[0]]
+		var total := 0.0
+		for p in list:
+			total += float(p[1])
+		var rows: Array[Vector4] = []
+		var offs: Array[Vector2] = []
+		for p in list:
+			rows.append(Vector4(ErosionField.TILE / float(p[0]), p[2], p[3], float(p[1]) / total))
+			offs.append(Vector2(p[4], p[5]))
+		material.set_shader_parameter(key[1], rows)
+		material.set_shader_parameter(key[1] + "_off", offs)
+	material.set_shader_parameter("relief_base_scale", placed["base_scale"])
+	material.set_shader_parameter("grid_cell_m", w.cell)
+	material.set_shader_parameter("mountain_foot", TerrainWindow.MOUNTAIN_FOOT)
+	material.set_shader_parameter("carve", TerrainWindow.MOUNTAIN_CARVE)
+	material.set_shader_parameter("foothill_relief", TerrainWindow.FOOTHILL_RELIEF)
+
+
 ## Gröberer Ausschnitt als Umgebung: gleiche Höhenskala wie der aktuelle, horizontal gestreckt,
 ## mit Loch, wo der aktuelle liegt. Grundstein für den späteren flüssigen Zoom.
 func _show_context(parent: TerrainWindow) -> void:
@@ -602,6 +628,7 @@ func _show_context(parent: TerrainWindow) -> void:
 	soft.convert(Image.FORMAT_RGBAH)
 	_context_material.set_shader_parameter("data_lin", ImageTexture.create_from_image(soft))
 	_context_material.set_shader_parameter("res", parent.res)
+	_apply_relief(_context_material, parent)
 	_context_material.set_shader_parameter("plane_size", PLANE)
 	_context_material.set_shader_parameter("height_scale", height_scale)
 	_context_material.set_shader_parameter("snowline", parent.climate["snowline"])
