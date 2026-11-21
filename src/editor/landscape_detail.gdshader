@@ -105,7 +105,7 @@ void fragment() {
 	vec3 floor_c = forest_floor * (0.75 + 0.5 * texture(forest_albedo, xz / 4.0).g);
 	float conifer = clamp(0.12 + smoothstep(300.0, 1400.0, h) * 0.8 + conifer_bias * 0.5, 0.0, 0.95);
 	vec3 broad = mix(texture(canopy_broadleaf, xz / 230.0).rgb, texture(canopy_broadleaf, xz.yx / 610.0 + 0.37).rgb, 0.35);
-	vec3 needles = mix(texture(canopy_conifer, xz / 190.0).rgb, texture(canopy_conifer, xz.yx / 530.0 + 0.61).rgb, 0.35);
+	vec3 needles = mix(texture(canopy_conifer, xz / 190.0).rgb, texture(canopy_conifer, xz.yx / 530.0 + 0.61).rgb, 0.35) * vec3(1.02, 1.1, 0.78);
 	vec3 crowns = mix(broad, needles, smoothstep(0.35, 0.65, conifer + (macro - 0.5) * 0.4));
 	c = mix(c, mix(floor_c, crowns, canopy), f * mix(0.85, 1.0, canopy));
 

@@ -139,8 +139,8 @@ void fragment() {
 	float f = smoothstep(0.2, 0.5, forest_f + (detail - 0.5) * 0.4 + (macro - 0.5) * 0.15);
 	float conifer = clamp(0.12 + smoothstep(300.0, 1400.0, height_f) * 0.8 + conifer_bias * 0.5, 0.0, 0.95);
 	vec3 broad = mix(texture(canopy_broadleaf, m / 230.0).rgb, texture(canopy_broadleaf, m.yx / 610.0 + 0.37).rgb, 0.35);
-	vec3 needles = mix(texture(canopy_conifer, m / 190.0).rgb, texture(canopy_conifer, m.yx / 530.0 + 0.61).rgb, 0.35);
-	vec3 trees = mix(broad, needles, smoothstep(0.35, 0.65, conifer + (vary * 0.6))) * (0.92 + vary * 0.35);
+	vec3 needles = mix(texture(canopy_conifer, m / 190.0).rgb, texture(canopy_conifer, m.yx / 530.0 + 0.61).rgb, 0.35) * vec3(1.02, 1.1, 0.78);
+	vec3 trees = mix(broad, needles, smoothstep(0.4, 0.65, conifer + vary * 0.3)) * (0.92 + vary * 0.35);
 	vec3 ground = mix(grass, mix(forest_floor_color, trees, canopy), f);
 
 	vec3 rock = mix(rock_dark_color, rock_color, smoothstep(0.25, 0.75, detail)) * (0.9 + 0.2 * micro);

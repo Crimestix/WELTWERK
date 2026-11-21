@@ -464,7 +464,14 @@ func _upload() -> void:
 		_material.set_shader_parameter("data_tex", _texture)
 	else:
 		_texture.update(image)
-	_material.set_shader_parameter("data_lin", _texture)
+	# Weich gefilterte Kopie mit 16 Bit je Kanal (32-Bit-Kommazahlen filtert nicht jede Grafikkarte).
+	var soft := image.duplicate() as Image
+	soft.convert(Image.FORMAT_RGBAH)
+	if _lin_texture == null or _lin_texture.get_width() != soft.get_width():
+		_lin_texture = ImageTexture.create_from_image(soft)
+	else:
+		_lin_texture.update(soft)
+	_material.set_shader_parameter("data_lin", _lin_texture)
 	# Grenzen für die Sichtbarkeitsprüfung (das Gitter wird erst im Shader gehoben).
 	var low := 0.0
 	var high := 0.0
@@ -498,7 +505,9 @@ func _show_context(parent: TerrainWindow) -> void:
 	_context.scale = Vector3(factor, 1.0, factor)
 	_context_texture = ImageTexture.create_from_image(_data_image(parent))
 	_context_material.set_shader_parameter("data_tex", _context_texture)
-	_context_material.set_shader_parameter("data_lin", _context_texture)
+	var soft := _data_image(parent)
+	soft.convert(Image.FORMAT_RGBAH)
+	_context_material.set_shader_parameter("data_lin", ImageTexture.create_from_image(soft))
 	_context_material.set_shader_parameter("res", parent.res)
 	_context_material.set_shader_parameter("plane_size", PLANE)
 	_context_material.set_shader_parameter("height_scale", height_scale)

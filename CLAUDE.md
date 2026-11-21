@@ -100,12 +100,11 @@ mit Schnee, Sandstrände, türkisfarbenes Flachwasser über tiefem Blau, natürl
 Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rückgängig,
 „Gespeichert“, Pinselkreis mit Einstellungen.
 
-## Noch offen
-- Wie Kontinentgröße und Handarbeit zusammenspielen (Frage an den Spielleiter offen).
-- Kontinentgröße ändern skaliert nur die Grundform, Striche bleiben in Metern – wie soll
-  Skalieren mit Handarbeit umgehen?
-- Flüssiger Übergang zwischen Maßstäben, Flüsse am Gefälle, Seen über Meereshöhe, Festsetzen,
-  Konfliktanzeige, Form zeichnen/importieren, mehrere Kontinente – noch nicht gebaut.
+## Noch offen (Stand 21. 11. 2026, Einzelheiten docs/BERICHT_KONTINENTE.md)
+- Flüssiger Übergang zwischen Maßstäben (heute Wechsel; Daten sind dafür bereit).
+- Formen nachträglich anfassen/verschieben; erzeugte Grundform als bearbeitbare Form.
+- Regionen mit Namen und Liste, Rechteck aufziehen; Flüsse, die sich selbst einen Weg suchen.
+- Überlappende Kontinente nur gemeldet, nicht zusammengeführt; Rückgängig gilt je Sitzung.
 
 ## Bestand und Lizenzen
 - Fremdbestände nur mit klarer Lizenz; Herkunft, Lizenz, Urheber und Größe in `docs/STILTEST.md`
@@ -116,10 +115,15 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
 - Laubmodelle nicht mit Godots automatischer Vereinfachung (LOD) importieren – sie rechnet
   Blätter weg. Normalenkarten beim Import als solche markieren (`tools/run_style_test.ps1`).
 
-## Weltmodell (Kurzfassung, Einzelheiten in `docs/PLAN.md`)
-- `WorldDocument` = Planet + Kontinente (Lage, Ausgangswert, Klima-Anpassung, **Strichliste**,
-  gemerkte Regionen). Jede Änderung ist ein Befehl → Rückgängig/Wiederholen. Gespeichert wird
-  nur dieser Stand (JSON); alles Abgeleitete wird neu berechnet.
+## Weltmodell (Kurzfassung, Einzelheiten in `docs/PLAN.md`, `docs/ENTWURF_KONTINENTE.md`)
+- `WorldDocument` = Planet (Radius bis doppelte Erde) + beliebig viele Kontinente mit **fester
+  ID** (Name, Grundform `generated`/`drawn`, Lage, Größe, `base_size_km`, Ausgangswert,
+  `scatter_seed`, Klima-Anpassung, **Strichliste**, gemerkte Regionen). Befehle verweisen auf die
+  ID, nie auf den Listenplatz; Planetwerte über `WorldDocument.PLANET`. Jede Änderung ist ein
+  Befehl → Rückgängig/Wiederholen. Gespeichert wird nur dieser Stand (JSON, volle Genauigkeit,
+  `.bak`; beschädigte Datei → `.defekt`, nie überschrieben); alles Abgeleitete wird neu berechnet.
+- Striche: Pinsel, Formen (`shape_add`/`shape_remove`), Erzeugung (`gen_*`, eigener Ausgangswert,
+  
 - `TerrainSampler` = die eine Auswertungsfunktion: Erzeugung (nur so fein wie das Raster) plus
   Striche → `TerrainWindow` (Ausschnitt: Höhe, Wald, Bearbeitungsmarken). Kontinentkoordinaten
   in Metern, 64 Bit, x = Osten, y = Norden.
@@ -142,7 +146,9 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
   `target_materials.gd` (Bäume, Felsen, Büsche, Gras – auch vom Editor genutzt),
   `meadow.gdshaderinc` (eine Wiesenfarbe für Boden und Gras), `water_clear.gdshader`,
   `rock_granite.gdshader`, `grass_cards.gdshader`, `target_landscape.gd` (Landschaft, rein).
-- `src/editor/landscape_detail.gdshader` – Editor-Boden im Zielstil (Ausschnitte bis 3,6 km).
+- `src/editor/landscape_detail.gdshader` – Editor-Boden im Zielstil (Ausschnitte bis 4,2 km).
+- `docs/BERICHT_KONTINENTE.md` – Bericht des Kontinent-Auftrags; `docs/abnahme/`, `docs/stufen/` Bilder.
+- `tools/profile_window.gd` – Auswertungszeit eines Ausschnitts je Bearbeitung messen.
 - `assets/target/` – Zielbestand (Blender-Skript + Higgsfield; Originale und Protokoll in
   `assets/target/source/`, nur `generated.json` im Repository).
 - `tools/` – Ladeskript Poly Haven, Blender-Skripte, Stiltest-Messlauf.
@@ -175,6 +181,9 @@ $godot = "C:\Users\Mattes\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-s
 & $godot --path D:\WELTWERK -- --screenshot=C:\pfad\bild.png                    # Bild speichern, beenden
 & $godot --position 2000,60 --path D:\WELTWERK -- --demo=D:\WELTWERK\docs\nachweis  # Nachweis vorführen (Bilder, Messwerte)
 & $godot --path D:\WELTWERK -- --welt=C:\pfad\welt.json --screenshot=C:\pfad\b.jpg  # andere Weltdatei, Bild
+& $godot --path D:\WELTWERK -- --neu                                            # leere Probewelt (user://welt_neu.json)
+& $godot --position 2000,60 --path D:\WELTWERK -- --abnahme=D:\WELTWERK\docs\abnahme --schritt=1  # Abnahme, dann --schritt=2
+& $godot --position 2000,60 --path D:\WELTWERK -- --welt=<welt.json> --stufen=<ordner> [--richtung=250]  # Bildreihe aller Stufen
 & $godot --path D:\WELTWERK res://scenes/style_test.tscn                         # Stiltest
 powershell -ExecutionPolicy Bypass -File tools\run_style_test.ps1                # Stiltest messen
 ```
@@ -205,3 +214,11 @@ Weltdatei: `user://welt.json` (Windows `%APPDATA%\Godot\app_userdata\Weltwerk\we
   Übertragung in die feinsten Editor-Ausschnitte. Die Editor-Kamera wird beim Hineinzoomen
   flacher (52° → 30°, nur zoomabhängig, nicht drehbar) – sonst wirken Gras und Bäume von oben
   wie Striche. Spielleiter hat 500 Higgsfield-Guthaben nachgelegt (Stand danach 561,85).
+- 21. 11. 2026 – Auftrag Kontinente (6–7 Stunden, bis 400 Higgsfield-Guthaben). Entscheidungen des
+  Spielleiters: **Planetengröße anpassbar bis doppelte Erde**; **Anzahl der Landmassen auf dem
+  Globus nicht begrenzen** (umgesetzt: Kontinentdaten als Textur, praktisch über 2.000).
+  Routineentscheidungen: neue Welt startet leer auf dem Globus; Kontinentfenster begrenzt das
+  Land (weicher Rand); Schutz wirkt gegen Erzeugung erst ab seiner Stelle in der Strichliste;
+  Bäume streuen nach eigenem Ausgangswert (bleiben bei neuer Variante); Wiese und Wald auf
+  mittleren Stufen in echten Metern (Kronendach-Luftbild); letzte Ansicht wird gemerkt (eigene
+  Datei neben der Welt). Ausgegeben: 8 Guthaben (Stand 553,85). Bericht `docs/BERICHT_KONTINENTE.md`.

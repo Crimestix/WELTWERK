@@ -1213,6 +1213,17 @@ func _acceptance_continue(dir: String, report: Dictionary) -> void:
 	_use_tool("navigate")
 	await _frames(15)
 	await _shot(dir.path_join("b02_weitergearbeitet.jpg"))
+	# Nachbarbereich: über den Rand schieben – der Ausschnitt wandert mit, die Stelle bleibt im Bild.
+	var level: Dictionary = levels.back()
+	var before_center := Vector2(level["cx"], level["cy"])
+	var focus_before := landscape.to_continent(camera_rig.focus_point())
+	camera_rig.shift_focus(Vector3(LandscapeView.PLANE * 0.42, 0.0, 0.0))
+	var aimed := landscape.to_continent(camera_rig.focus_point())
+	await _frames(10)
+	var moved := Vector2(levels.back()["cx"], levels.back()["cy"]).distance_to(before_center)
+	var still := landscape.to_continent(camera_rig.focus_point()).distance_to(aimed)
+	checks["Ausschnitt wandert beim Verschieben über den Rand mit (%s)" % EditorUI.meters(moved)] = moved > level["size"] * 0.2 and still < level["size"] * 0.01 and focus_before != aimed
+	await _shot(dir.path_join("b02b_nachbarbereich.jpg"))
 	open_globe()
 	await _frames(30)
 	await _shot(dir.path_join("b03_globus_nach_neustart.jpg"))
