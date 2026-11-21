@@ -12,7 +12,8 @@ des Bodens.
 - Bestand A laden: `tools\fetch_polyhaven.ps1` · B bauen: `tools\blender\make_style_b.py` ·
   C bauen: `tools\blender\make_style_c.py`
 
-**Zielbild** (mit Higgsfield erzeugt, nur als Richtung – kein Kanon):
+**Zielbild** (mit Higgsfield erzeugt; vom Spielleiter am 21. 11. 2026 als Ziel bestätigt – als
+Richtung, kein Kanon):
 
 ![Zielbild](stiltest/zielbild_higgsfield.jpg)
 

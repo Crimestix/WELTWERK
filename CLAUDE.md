@@ -100,9 +100,7 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
 „Gespeichert“, Pinselkreis mit Einstellungen.
 
 ## Noch offen
-- Bildsprache nach dem Stiltest (`docs/STILTEST.md`): Empfehlung Variante C (Blattkarten-Bäume
-  mit Higgsfield-Laub, Poly-Haven-Gelände mit Farbanpassung) – Entscheidung des Spielleiters
-  steht aus. Der Editor nutzt C-Bäume bereits im feinsten Ausschnitt.
+- Wie Kontinentgröße und Handarbeit zusammenspielen (Frage an den Spielleiter offen).
 - Kontinentgröße ändern skaliert nur die Grundform, Striche bleiben in Metern – wie soll
   Skalieren mit Handarbeit umgehen?
 - Flüssiger Übergang zwischen Maßstäben, Flüsse am Gefälle, Seen über Meereshöhe, Festsetzen,
@@ -188,3 +186,8 @@ Weltdatei: `user://welt.json` (Windows `%APPDATA%\Godot\app_userdata\Weltwerk\we
   „Erzeugung + Strichliste in Kontinentmetern“, Ansichten als Fenster mit Faktor 8,
   Bearbeitungen in gröberen Ansichten vereinfacht und – wo zu klein – messingfarben markiert.
   Standardgröße eines neuen Kontinents 1.600 km. Kein Name wird erzeugt.
+- 21. 11. 2026 – **Zielbild bestätigt** (Spielleiter: „Das hier ist definitiv das Ziel“):
+  `docs/stiltest/zielbild_higgsfield.jpg` – sonnige Hügelwiese mit einzelnen Laubbäumen
+  (sichtbare Stämme, lockere Kronen), Wildblumen und Halme, flechtige Granitbänke am Ufer,
+  klares Wasser mit sichtbaren Steinen, türkis zu tiefblau, warmes Licht. Weg dorthin:
+  Stiltest-Variante C (Blattkarten-Bäume, Higgsfield-Laub, Poly-Haven-Gelände mit Farbanpassung).
