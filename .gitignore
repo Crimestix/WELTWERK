@@ -24,6 +24,13 @@ export_credentials.cfg
 /docs/nachweis/welt.json
 /docs/nachweis/*_ansicht.json
 /docs/abnahme/*.json
+/docs/orte/welt.json
+# Ortsprüfung: Einzelbilder stecken in den Bögen (vergleich_*.jpg, bearbeitung_<stelle>.jpg)
+/docs/orte/ort_*.jpg
+/docs/orte/bearbeitung_gipfel_*.jpg
+/docs/orte/bearbeitung_tal_*.jpg
+/docs/orte/bearbeitung_pass_vorher.jpg
+/docs/orte/bearbeitung_pass_nachher.jpg
 *_ansicht.json
 *.defekt
 *.json.neu

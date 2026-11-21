@@ -91,57 +91,11 @@ func outline_points() -> PackedVector2Array:
 
 func run(dir: String) -> void:
 	var timing := {}
-	await editor._frames(20)
-	# 1 Neuer gezeichneter Kontinent, Ansicht wie die Referenz.
-	editor.ui.new_continent_pressed.emit(true)
-	await editor._frames(10)
-	# Gemäßigte Breite wie in der Referenz (Schnee auf den Kämmen, Laub- und Nadelwald).
-	editor._on_placement("latitude", 42.0, true)
-	await editor._frames(5)
-	_frame()
-	await editor._frames(20)
 	var ui_was: bool = editor.ui.visible
-	# Die Werkzeugleiste darf das Nachzeichnen am Westrand nicht abfangen.
-	editor.ui.visible = false
-	await _screen_line(outline_points(), true)
-	checks["Umriss nachgezeichnet (eine Form)"] = _strokes() == 1
-	editor.ui.visible = true
-	await editor._frames(10)
-	await editor._shot(dir.path_join("umriss.jpg"))
-	editor.ui.visible = false
-	_frame()
-	await editor._frames(5)
-
+	# 1 Neuer gezeichneter Kontinent, Ansicht wie die Referenz.
+	await build_outline(dir.path_join("umriss.jpg"))
 	# 2 Bucht im Nordosten, Gebirge, Hügel, Wald, Flüsse, Seen, Inseln – wie ein Nutzer.
-	editor._use_tool("shape_remove")
-	await _screen_line(_screen_points(BAY), true)
-	var t := Time.get_ticks_usec()
-	for chain in MOUNTAINS:
-		editor._use_tool("gen_mountains")
-		editor.ui.set_brush(0.085, 0.85)
-		await _ground_stroke(chain)
-	timing["Gebirge malen"] = (Time.get_ticks_usec() - t) / 1000.0
-	for chain in HILLS:
-		editor._use_tool("gen_hills")
-		editor.ui.set_brush(0.05, 0.7)
-		await _ground_stroke(chain)
-	for chain in FORESTS:
-		editor._use_tool("gen_forest")
-		editor.ui.set_brush(0.06, 0.9)
-		await _ground_stroke(chain)
-	for chain in RIVERS:
-		editor._use_tool("river")
-		editor.ui.set_brush(0.0015, 0.5)
-		await _screen_line(_screen_points(chain), false)
-	for p in LAKES:
-		editor._use_tool("lake")
-		editor.ui.set_brush(0.02, 0.5)
-		var g := ground_of_ref(p)
-		await editor._mouse_click(g)
-	for chain in ISLANDS:
-		editor._use_tool("gen_islands")
-		editor.ui.set_brush(0.03, 0.8)
-		await _ground_stroke(chain)
+	await build_features(timing)
 	# Gezeichnete Landformen nachträglich verändern (wählen, umformen, verschieben, skalieren, löschen).
 	await _edit_shapes(dir)
 	editor._use_tool("navigate")
@@ -189,6 +143,65 @@ func run(dir: String) -> void:
 	for key in checks:
 		print("  %s %s" % ["ok  " if checks[key] else "FEHLT", key])
 	editor.get_tree().quit()
+
+
+## Aufbau, Teil 1 (auch für andere Prüfläufe, z. B. LandmarkRun): neuer gezeichneter Kontinent
+## auf 42° Breite, Umriss der Referenz mit der Maus nachgezeichnet. shot_path: Bild des Umrisses
+## ("" = keins). Danach ist die Oberfläche ausgeblendet (wie für das Nachzeichnen nötig).
+func build_outline(shot_path: String = "") -> void:
+	await editor._frames(20)
+	editor.ui.new_continent_pressed.emit(true)
+	await editor._frames(10)
+	# Gemäßigte Breite wie in der Referenz (Schnee auf den Kämmen, Laub- und Nadelwald).
+	editor._on_placement("latitude", 42.0, true)
+	await editor._frames(5)
+	_frame()
+	await editor._frames(20)
+	# Die Werkzeugleiste darf das Nachzeichnen am Westrand nicht abfangen.
+	editor.ui.visible = false
+	await _screen_line(outline_points(), true)
+	checks["Umriss nachgezeichnet (eine Form)"] = _strokes() == 1
+	editor.ui.visible = true
+	await editor._frames(10)
+	if shot_path != "":
+		await editor._shot(shot_path)
+	editor.ui.visible = false
+	_frame()
+	await editor._frames(5)
+
+
+## Aufbau, Teil 2: Bucht, Gebirge, Hügel, Wald, Flüsse, Seen und Inseln an den Stellen der
+## Referenz – mit echten Mausereignissen, wie ein Nutzer. Erwartet die Ansicht nach build_outline.
+func build_features(timing: Dictionary) -> void:
+	editor._use_tool("shape_remove")
+	await _screen_line(_screen_points(BAY), true)
+	var t := Time.get_ticks_usec()
+	for chain in MOUNTAINS:
+		editor._use_tool("gen_mountains")
+		editor.ui.set_brush(0.085, 0.85)
+		await _ground_stroke(chain)
+	timing["Gebirge malen"] = (Time.get_ticks_usec() - t) / 1000.0
+	for chain in HILLS:
+		editor._use_tool("gen_hills")
+		editor.ui.set_brush(0.05, 0.7)
+		await _ground_stroke(chain)
+	for chain in FORESTS:
+		editor._use_tool("gen_forest")
+		editor.ui.set_brush(0.06, 0.9)
+		await _ground_stroke(chain)
+	for chain in RIVERS:
+		editor._use_tool("river")
+		editor.ui.set_brush(0.0015, 0.5)
+		await _screen_line(_screen_points(chain), false)
+	for p in LAKES:
+		editor._use_tool("lake")
+		editor.ui.set_brush(0.02, 0.5)
+		var g := ground_of_ref(p)
+		await editor._mouse_click(g)
+	for chain in ISLANDS:
+		editor._use_tool("gen_islands")
+		editor.ui.set_brush(0.03, 0.8)
+		await _ground_stroke(chain)
 
 
 ## Ausschnitt der Referenz (Bildpunkte), der für den Variantenvergleich vergrößert wird.
