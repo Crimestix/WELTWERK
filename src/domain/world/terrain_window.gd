@@ -121,7 +121,16 @@ func contains(x: float, y: float) -> bool:
 
 
 func compose_all() -> void:
-	compose_rect(0, 0, res - 1, res - 1)
+	# Zeilenblöcke parallel: jede Zeile schreibt nur ihre eigenen Rasterpunkte.
+	var blocks := maxi(1, mini(OS.get_processor_count() * 2, res / 16))
+	var rows_per := int(ceil(float(res) / blocks))
+	var job := func(b: int) -> void:
+		var j0 := b * rows_per
+		var j1 := mini(j0 + rows_per - 1, res - 1)
+		if j0 <= j1:
+			compose_rect(0, j0, res - 1, j1)
+	var task := WorkerThreadPool.add_group_task(job, blocks, -1, true, "Weltwerk Zusammensetzen")
+	WorkerThreadPool.wait_for_group_task_completion(task)
 
 
 ## Rechnet Höhe und Wald im Rechteck [i0..i1] × [j0..j1] aus Grundlagen und Bearbeitungen.
