@@ -149,12 +149,13 @@ func _evaluate_base_cached(w: TerrainWindow) -> void:
 		w.base_forest = (hit[3] as PackedFloat32Array).duplicate()
 		w.erosion_alpine = (hit[4] as PackedFloat32Array).duplicate()
 		w.erosion_hills = (hit[5] as PackedFloat32Array).duplicate()
+		w.erosion_alpine_fine = (hit[6] as PackedFloat32Array).duplicate()
 		_base_order.erase(key)
 		_base_order.append(key)
 		return
 	evaluate_base(w)
 	_base_cache[key] = [w.base_land.duplicate(), w.relief_low.duplicate(), w.relief_detail.duplicate(), w.base_forest.duplicate(),
-		w.erosion_alpine.duplicate(), w.erosion_hills.duplicate()]
+		w.erosion_alpine.duplicate(), w.erosion_hills.duplicate(), w.erosion_alpine_fine.duplicate()]
 	_base_order.append(key)
 	while _base_order.size() > BASE_CACHE_SIZE:
 		_base_cache.erase(_base_order.pop_front())
@@ -214,6 +215,7 @@ func evaluate_base(w: TerrainWindow) -> void:
 	var detail := w.relief_detail
 	var forest := w.base_forest
 	var alpine := w.erosion_alpine
+	var alpine_fine := w.erosion_alpine_fine
 	var hills := w.erosion_hills
 	var res := w.res
 	for j in res:
@@ -226,7 +228,9 @@ func evaluate_base(w: TerrainWindow) -> void:
 			forest[offset + i] = row[3][i]
 			alpine[offset + i] = row[4][i]
 			hills[offset + i] = row[5][i]
+			alpine_fine[offset + i] = row[6][i]
 	w.erosion_alpine = alpine
+	w.erosion_alpine_fine = alpine_fine
 	w.erosion_hills = hills
 	_rows.clear()
 
@@ -262,7 +266,9 @@ func _base_row(j: int, w: TerrainWindow) -> void:
 	var detail := PackedFloat32Array()
 	var forest := PackedFloat32Array()
 	var alpine := PackedFloat32Array()
+	var alpine_fine := PackedFloat32Array()
 	var hills := PackedFloat32Array()
+	alpine_fine.resize(res)
 	land.resize(res)
 	low.resize(res)
 	detail.resize(res)
@@ -270,7 +276,10 @@ func _base_row(j: int, w: TerrainWindow) -> void:
 	alpine.resize(res)
 	hills.resize(res)
 	var s := base_scale
-	var alp := ErosionField.prepare(ErosionField.pyramid("alpine"), _relief_alpine, w.cell * s)
+	# Gebirge getrennt: große Form (Massive, Haupttäler) und feinere Täler/Rinnen – „Glätten“
+	# nimmt nur die feineren zurück.
+	var alp := ErosionField.prepare(ErosionField.pyramid("alpine"), _relief_alpine, w.cell * s, 0, 1)
+	var alp_fine := ErosionField.prepare(ErosionField.pyramid("alpine"), _relief_alpine, w.cell * s, 1)
 	var hil := ErosionField.prepare(ErosionField.pyramid("hills"), _relief_hills, w.cell * s)
 	var y := w.y_at(j) * s
 	var half: float = continent["size_km"] * 500.0 * s
@@ -286,12 +295,14 @@ func _base_row(j: int, w: TerrainWindow) -> void:
 		if i % 2 == 0 or i == res - 1:
 			var x := w.x_at(i) * s
 			alpine[i] = ErosionField.value_prepared(alp, x, y)
+			alpine_fine[i] = ErosionField.value_prepared(alp_fine, x, y)
 			hills[i] = ErosionField.value_prepared(hil, x, y)
 	for i in range(1, res - 1, 2):
 		alpine[i] = (alpine[i - 1] + alpine[i + 1]) * 0.5
+		alpine_fine[i] = (alpine_fine[i - 1] + alpine_fine[i + 1]) * 0.5
 		hills[i] = (hills[i - 1] + hills[i + 1]) * 0.5
 	_mutex.lock()
-	_rows[j] = [land, low, detail, forest, alpine, hills]
+	_rows[j] = [land, low, detail, forest, alpine, hills, alpine_fine]
 	_mutex.unlock()
 
 

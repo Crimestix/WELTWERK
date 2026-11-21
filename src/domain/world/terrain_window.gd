@@ -15,6 +15,8 @@ const NO_BED := 1000000.0
 const MOUNTAIN_FOOT := 250.0
 ## Wie stark Grate gehoben und Täler eingetieft werden (Anteil der Höhe über dem Vorland).
 const MOUNTAIN_CARVE := 1.05
+## Grate werden um diesen Anteil weniger gehoben, als Täler eingetieft werden.
+const RIDGE_LIFT := 0.45
 ## Höhenspanne der Vorberge (m).
 const FOOTHILL_RELIEF := 260.0
 
@@ -33,8 +35,10 @@ var base_land := PackedFloat32Array()
 var relief_low := PackedFloat32Array()
 var relief_detail := PackedFloat32Array()
 var base_forest := PackedFloat32Array()
-## Geografisches Erosionsrelief (0–1, Mitte 0,5): Gebirge und Vorberge (ErosionField).
+## Geografisches Erosionsrelief um die Mitte (−0,5 … +0,5, ErosionField): Gebirge in großer Form
+## (Massive, Haupttäler) und feineren Tälern/Rinnen, Vorberge.
 var erosion_alpine := PackedFloat32Array()
+var erosion_alpine_fine := PackedFloat32Array()
 var erosion_hills := PackedFloat32Array()
 # Aus den Strichen
 var land_edit := PackedFloat32Array()
@@ -72,9 +76,11 @@ func _init(p_cx: float, p_cy: float, p_size: float, p_res: int) -> void:
 	relief_detail.resize(n)
 	base_forest.resize(n)
 	erosion_alpine.resize(n)
+	erosion_alpine_fine.resize(n)
 	erosion_hills.resize(n)
-	erosion_alpine.fill(0.5)
-	erosion_hills.fill(0.5)
+	erosion_alpine.fill(0.0)
+	erosion_alpine_fine.fill(0.0)
+	erosion_hills.fill(0.0)
 	land_edit.resize(n)
 	height_edit.resize(n)
 	smooth_edit.resize(n)
@@ -158,14 +164,17 @@ func compose_rect(i0: int, j0: int, i1: int, j1: int) -> void:
 			var h := lerpf(h_sea, h_land, coast) + height_edit[k]
 			# Gebirge und Vorberge: Grate, Haupt- und Seitentäler aus dem Erosionsrelief, in fester
 			# Weltlage – jede Höhe über dem Vorland wird nach der Kachel gehoben oder eingetieft.
+			# Glätten nimmt nur die feineren Täler und Rinnen zurück; Massive und Haupttäler bleiben.
 			var detail_keep := 1.0 - smooth
+			var e := erosion_alpine[k] + erosion_alpine_fine[k] * detail_keep
 			var above := h - MOUNTAIN_FOOT
 			if above > 0.0:
-				var e := erosion_alpine[k] - 0.5
-				h = MOUNTAIN_FOOT + above * maxf(1.0 + MOUNTAIN_CARVE * 2.0 * e * detail_keep * smoothstep(0.0, 600.0, above), 0.15)
+				# Täler tief eingeschnitten, Grate nur mäßig gehoben (sonst wachsen Gipfel über das Gemalte).
+				var shape := e * (1.0 if e < 0.0 else RIDGE_LIFT)
+				h = MOUNTAIN_FOOT + above * maxf(1.0 + MOUNTAIN_CARVE * 2.0 * shape * smoothstep(0.0, 600.0, above), 0.15)
 			if h > 2.0:
 				var foothill := smoothstep(40.0, 350.0, h) * (1.0 - smoothstep(900.0, 1800.0, h))
-				h += (erosion_hills[k] - 0.5) * FOOTHILL_RELIEF * foothill * detail_keep
+				h += erosion_hills[k] * FOOTHILL_RELIEF * foothill * detail_keep
 			var fw := flat_weight[k]
 			if fw > 0.0:
 				h = lerpf(h, flat_level[k], clampf(fw, 0.0, 1.0))
@@ -177,8 +186,8 @@ func compose_rect(i0: int, j0: int, i1: int, j1: int) -> void:
 			height[k] = h
 			# Großflächiger Wald: Vorberge und Gebirgstäler bewaldet, offene Ebenen lichter, Grate kahl.
 			var hill_band := smoothstep(120.0, 600.0, h) * (1.0 - smoothstep(1600.0, 2400.0, h))
-			var vale := clampf((0.5 - erosion_alpine[k]) * 3.0, 0.0, 1.0) * smoothstep(500.0, 1200.0, h)
-			var ridge := clampf((erosion_alpine[k] - 0.55) * 3.0, 0.0, 1.0) * smoothstep(500.0, 1200.0, h)
+			var vale := clampf(-e * 3.0, 0.0, 1.0) * smoothstep(500.0, 1200.0, h)
+			var ridge := clampf((e - 0.05) * 3.0, 0.0, 1.0) * smoothstep(500.0, 1200.0, h)
 			var wet := 1.0 - smoothstep(0.25, 0.7, float(climate.get("dryness", 0.3)))
 			# Zusammenhängende Wälder statt vieler Flecken: Neigung aus Grundform, Vorbergen und Tälern,
 			# dann weich, aber deutlich geschwellt.

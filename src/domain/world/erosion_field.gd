@@ -102,15 +102,17 @@ static func placements(scales: Array, seed_value: int) -> Array:
 ## Für ein Raster der Weite cell vorbereiten (Mipmap-Stufen je Kachelgröße stehen für den ganzen
 ## Ausschnitt fest): [[1/Texelgröße, cos, sin, Versatz u, Versatz v, Anteil, Daten a, Größe a,
 ## Daten b, Größe b, Mischung], …]. Texel mindestens zwei Zellen groß – nur, was das Raster trägt.
-static func prepare(levels: Array, placed: Array, cell: float) -> Array:
+static func prepare(levels: Array, placed: Array, cell: float, first: int = 0, count: int = 99) -> Array:
 	var out := []
 	var total := 0.0
 	for p in placed:
 		total += float(p[1])
 	var top := levels.size() - 1
-	for p in placed:
+	for idx in range(first, mini(first + count, placed.size())):
+		var p: Array = placed[idx]
 		var size: float = p[0]
-		var lod := clampf(log(maxf(2.0 * cell * TILE / size, 1.0)) / log(2.0), 0.0, float(top))
+		# Texel etwa eine Zelle: so fein, wie das Raster trägt (Mittel der feinen Stufe über eine Zelle).
+		var lod := clampf(log(maxf(cell * TILE / size, 1.0)) / log(2.0), 0.0, float(top))
 		var l0 := int(floor(lod))
 		var l1 := mini(l0 + 1, top)
 		out.append([float(TILE) / size, p[2], p[3], p[4], p[5], float(p[1]) / total,
@@ -118,7 +120,8 @@ static func prepare(levels: Array, placed: Array, cell: float) -> Array:
 	return out
 
 
-## Summe der Kachelgrößen an (x, y) (m) für ein vorbereitetes Raster: 0–1, Mitte 0,5.
+## Summe der Kachelgrößen an (x, y) (m) für ein vorbereitetes Raster, um die Mitte: Anteil je
+## Größe mal (Kachelwert − 0,5). Alle Größen zusammen ergeben −0,5 … +0,5.
 static func value_prepared(prep: Array, x: float, y: float) -> float:
 	var v := 0.0
 	for p in prep:
@@ -131,10 +134,10 @@ static func value_prepared(prep: Array, x: float, y: float) -> float:
 		if t > 0.001:
 			var size_b: int = p[9]
 			a = lerpf(a, _bilinear(p[8], size_b, u * size_b / TILE, w * size_b / TILE), t)
-		v += a * p[5]
+		v += (a - 0.5) * p[5]
 	return v
 
 
 ## Summe der Kachelgrößen an (x, y) (m), geglättet für ein Raster der Weite cell (m): 0–1, Mitte 0,5.
 static func value(levels: Array, placed: Array, x: float, y: float, cell: float) -> float:
-	return value_prepared(prepare(levels, placed, cell), x, y)
+	return value_prepared(prepare(levels, placed, cell), x, y) + 0.5

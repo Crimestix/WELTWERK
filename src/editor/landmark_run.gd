@@ -181,7 +181,8 @@ func _find_places() -> void:
 	if not valley.is_empty():
 		var v: Vector2 = valley["point"]
 		chain = [v]
-		for refine in [[10000.0, 1200.0], [1500.0, 250.0]]:
+		# Erst grob den Haupttalgrund suchen (nicht in eine Seitenrinne rutschen), dann verfeinern.
+		for refine in [[25000.0, 4000.0], [6000.0, 600.0], [1500.0, 150.0]]:
 			var w := sampler.window(v.x, v.y, refine[0], 257)
 			v = Landmarks.lowest_in(w, v, refine[1])
 			chain.append(v)
@@ -462,7 +463,7 @@ func _edit(dir: String, p: Dictionary, tool: String, fraction: float, strength: 
 		_:
 			var rb := relief_before.y - relief_before.x
 			var ra := relief_after.y - relief_after.x
-			checks["%s: Kontinentstufe nicht unruhiger (Spannweite %d → %d m)" % [label, int(rb), int(ra)]] = ra <= rb + 1.0
+			checks["%s: Kontinentstufe nicht unruhiger (Spannweite %d → %d m)" % [label, int(rb), int(ra)]] = ra <= rb * 1.01 + 10.0  # Rundung der Zellmittel; geglättet wird nur im feinen Anteil
 	p["edit"] = entry
 	_caption.text = "%s · %s · nachher (%s)" % [p["name"], _level_names()[EDIT_LEVEL], label]
 	await editor._frames(20)

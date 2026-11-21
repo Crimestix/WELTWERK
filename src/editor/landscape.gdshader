@@ -190,7 +190,7 @@ vec2 geo_uv(vec4 r, vec2 off, vec2 p) {
 vec2 geo_gradient(sampler2D nmap, vec4 r, vec2 off, vec2 p, float px, float cell, float scale) {
 	vec2 uv = geo_uv(r, off, p);
 	float lod_px = max(log2(max(px * r.x, 1e-6)), 0.0);
-	float lod_grid = max(log2(max(2.0 * cell * r.x, 1e-6)), 0.0);
+	float lod_grid = max(log2(max(cell * r.x, 1e-6)), 0.0);
 	if (lod_px >= lod_grid) {
 		return vec2(0.0);
 	}
@@ -391,7 +391,8 @@ void fragment() {
 		* smoothstep(0.3, 0.58, crest * 0.75 + d_slope * 1.1 - gully * 0.9 + (rocky - 0.5) * 0.2 + 0.05);
 	rock_w = max(rock_w, massif);
 	float snow_score = height_f + vary * 400.0 + clamp(-curv, -100.0, 300.0) + (crest - gully) * 500.0 * mountain;
-	float snow_w = smoothstep(snowline - 150.0, snowline + 150.0, snow_score) * (1.0 - smoothstep(0.62, 0.85, d_slope));
+	// Schnee auf hohen Kämmen und Mulden, steile Flanken bleiben Fels.
+	float snow_w = smoothstep(snowline + 100.0, snowline + 500.0, snow_score) * (1.0 - smoothstep(0.4, 0.65, d_slope));
 	vec3 snow = snow_color;
 	if (map_style == 1) {
 		snow = mix(snow_color, tex_world(tex_snow, m, px_m, rock_px, 23.0), 0.6);
