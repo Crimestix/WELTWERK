@@ -97,12 +97,53 @@ func window(cx: float, cy: float, size: float, res: int = 257) -> TerrainWindow:
 	var block := w.gen_block
 	block.fill(0.0)
 	w.gen_block = block
-	evaluate_base(w)
+	_evaluate_base_cached(w)
 	for stroke in continent["strokes"]:
 		if touches(w, stroke):
 			apply_stroke(w, stroke)
 	w.compose_all()
 	return w
+
+
+## Zuletzt berechnete Grundformen (Ausschnitt nach Schutz und Grundform, vor allen übrigen
+## Bearbeitungen). Eine neue Bearbeitung ändert die Grundform nicht – so muss nach einem Strich,
+## einer Form oder Rückgängig nur die Strichliste neu angewandt werden. Abgeleitet, nie gespeichert.
+const BASE_CACHE_SIZE := 6
+static var _base_cache := {}
+static var _base_order: Array = []
+
+
+func _base_key(w: TerrainWindow) -> String:
+	var protects := []
+	for stroke in continent["strokes"]:
+		if stroke["tool"] == "protect" and touches(w, stroke):
+			protects.append(stroke)
+	# Volle Genauigkeit (JSON mit allen Stellen): kleinste Lageunterschiede ergeben einen anderen Schlüssel.
+	return JSON.stringify([int(continent["seed"]), int(continent.get("scatter_seed", 0)), str(continent.get("base", "")),
+		base_scale, float(continent["size_km"]), float(climate["dryness"]), w.cx, w.cy, w.res, w.size, protects], "", false, true)
+
+
+static func clear_base_cache() -> void:
+	_base_cache.clear()
+	_base_order.clear()
+
+
+func _evaluate_base_cached(w: TerrainWindow) -> void:
+	var key := _base_key(w)
+	if _base_cache.has(key):
+		var hit: Array = _base_cache[key]
+		w.base_land = (hit[0] as PackedFloat32Array).duplicate()
+		w.relief_low = (hit[1] as PackedFloat32Array).duplicate()
+		w.relief_detail = (hit[2] as PackedFloat32Array).duplicate()
+		w.base_forest = (hit[3] as PackedFloat32Array).duplicate()
+		_base_order.erase(key)
+		_base_order.append(key)
+		return
+	evaluate_base(w)
+	_base_cache[key] = [w.base_land.duplicate(), w.relief_low.duplicate(), w.relief_detail.duplicate(), w.base_forest.duplicate()]
+	_base_order.append(key)
+	while _base_order.size() > BASE_CACHE_SIZE:
+		_base_cache.erase(_base_order.pop_front())
 
 
 ## Kann der Strich diesen Ausschnitt überhaupt berühren? (Spart die Arbeit für alle anderen.)

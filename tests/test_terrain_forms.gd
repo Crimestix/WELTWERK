@@ -208,3 +208,19 @@ func test_drawn_coast_is_natural_but_stays_in_place() -> void:
 	check(edges > smooth * 1.25, "Küste gebuchtet (%d Kanten statt %.0f)" % [edges, smooth])
 	check(w.height_at(0.0, 0.0) > 0.0 and w.height_at(150000.0, 150000.0) > 0.0, "innen Land")
 	check(w.height_at(0.0, 260000.0) < 0.0 and w.height_at(-260000.0, -260000.0) < 0.0, "weit außen Meer")
+
+
+func test_base_cache_gives_identical_windows() -> void:
+	# Zwischengespeicherte Grundform: gleiches Ergebnis wie frisch gerechnet, auch nach neuer Bearbeitung.
+	var c := WorldDocument.new_continent(4711, WorldDocument.BASE_GENERATED, 600.0)
+	var planet := {"radius_km": 6371.0, "temperature_offset": 0.0}
+	TerrainSampler.clear_base_cache()
+	var first := TerrainSampler.new(c, planet).window(10000.0, -5000.0, 200000.0, 65)
+	var stroke := Stroke.create("raise", 20000.0, 300.0)
+	Stroke.add_point(stroke, 0.0, 0.0)
+	(c["strokes"] as Array).append(stroke)
+	var cached := TerrainSampler.new(c, planet).window(10000.0, -5000.0, 200000.0, 65)
+	TerrainSampler.clear_base_cache()
+	var fresh := TerrainSampler.new(c, planet).window(10000.0, -5000.0, 200000.0, 65)
+	check(cached.height == fresh.height, "Höhen gleich mit und ohne Zwischenspeicher")
+	check(cached.height != first.height, "neue Bearbeitung wirkt trotz Zwischenspeicher")
