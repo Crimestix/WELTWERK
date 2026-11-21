@@ -33,7 +33,14 @@ extends Node3D
 ## Wie schnell die Kamera ihrem Ziel folgt (größer = direkter).
 @export var smoothing: float = 14.0
 
+## Wird weiter gezoomt, obwohl der Anschlag erreicht ist (zweimal kurz hintereinander):
+## inward = hinein. Dient dem Wechsel in einen feineren oder gröberen Maßstab.
+signal zoom_limit(inward: bool, screen_position: Vector2)
+
 @onready var camera: Camera3D = $Camera3D
+
+var _limit_count := 0
+var _limit_time := 0.0
 
 var _focus := Vector3.ZERO
 var _target_focus := Vector3.ZERO
@@ -139,6 +146,12 @@ func _apply() -> void:
 
 ## Zoomt so, dass der Punkt unter dem Mauszeiger an seiner Stelle bleibt.
 func _zoom_towards(screen_position: Vector2, factor: float) -> void:
+	if factor < 1.0 and _target_distance <= min_distance + 0.001:
+		_push_limit(true, screen_position)
+		return
+	if factor > 1.0 and _target_distance >= max_distance - 0.001:
+		_push_limit(false, screen_position)
+		return
 	var old_distance := _target_distance
 	_target_distance = clampf(_target_distance * factor, min_distance, max_distance)
 	var anchor: Variant = _ground_under(screen_position)
@@ -148,6 +161,22 @@ func _zoom_towards(screen_position: Vector2, factor: float) -> void:
 	var shift := 1.0 - _target_distance / old_distance
 	var towards := Vector3(anchor_point.x - _target_focus.x, 0.0, anchor_point.z - _target_focus.z)
 	_target_focus += towards * shift
+
+
+func _push_limit(inward: bool, screen_position: Vector2) -> void:
+	var now := Time.get_ticks_msec() / 1000.0
+	if now - _limit_time > 0.8:
+		_limit_count = 0
+	_limit_time = now
+	_limit_count += 1
+	if _limit_count >= 2:
+		_limit_count = 0
+		zoom_limit.emit(inward, screen_position)
+
+
+## Bodenpunkt unter einer Bildschirmposition (Darstellungskoordinaten) oder null.
+func ground_point_under(screen_position: Vector2) -> Variant:
+	return _ground_under(screen_position)
 
 
 ## Verschiebt die Welt mit dem Mauszeiger („anfassen und ziehen“).

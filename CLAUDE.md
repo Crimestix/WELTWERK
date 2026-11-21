@@ -97,7 +97,11 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
 - Bildsprache nach dem Stiltest (`docs/STILTEST.md`): Empfehlung Gelände/Felsen wie B, für
   Bäume einen dritten Weg testen – Entscheidung des Spielleiters steht aus.
 - Higgsfield-Programm ist nicht installiert (Installation nur mit Okay des Spielleiters).
-- Leistung auf dem MacBook Air noch nicht gemessen.
+- Leistung auf dem MacBook Air noch nicht gemessen (Nachweis: `docs/NACHWEIS.md`).
+- Kontinentgröße ändern skaliert nur die Grundform, Striche bleiben in Metern – wie soll
+  Skalieren mit Handarbeit umgehen?
+- Flüssiger Übergang zwischen Maßstäben, Flüsse am Gefälle, Seen über Meereshöhe, Festsetzen,
+  Konfliktanzeige, Form zeichnen/importieren, mehrere Kontinente – noch nicht gebaut.
 
 ## Bestand und Lizenzen
 - Fremdbestände nur mit klarer Lizenz; Herkunft, Lizenz, Urheber und Größe in `docs/STILTEST.md`
@@ -108,9 +112,26 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
 - Laubmodelle nicht mit Godots automatischer Vereinfachung (LOD) importieren – sie rechnet
   Blätter weg. Normalenkarten beim Import als solche markieren (`tools/run_style_test.ps1`).
 
+## Weltmodell (Kurzfassung, Einzelheiten in `docs/PLAN.md`)
+- `WorldDocument` = Planet + Kontinente (Lage, Ausgangswert, Klima-Anpassung, **Strichliste**,
+  gemerkte Regionen). Jede Änderung ist ein Befehl → Rückgängig/Wiederholen. Gespeichert wird
+  nur dieser Stand (JSON); alles Abgeleitete wird neu berechnet.
+- `TerrainSampler` = die eine Auswertungsfunktion: Erzeugung (nur so fein wie das Raster) plus
+  Striche → `TerrainWindow` (Ausschnitt: Höhe, Wald, Bearbeitungsmarken). Kontinentkoordinaten
+  in Metern, 64 Bit, x = Osten, y = Norden.
+- Ansichten sind Fenster (Mitte, Größe); „Vertiefen“ = 1/8. Darstellung auf 1000 Einheiten
+  normiert, grobe Ansichten überhöht (nur Darstellung).
+- Packed-Arrays fremder Objekte nie elementweise beschreiben (`w.feld[k] = …` kopiert jedes Mal
+  das ganze Feld): lokal holen, ändern, einmal zurückweisen.
+
 ## Aufbau
 - `project.godot` – Projekteinstellungen, Tastenbelegung (`[input]`).
-- `scenes/main.tscn` – Hauptszene: Himmel, Sonne, Gelände, Kamera, Steuerungshilfe.
+- `scenes/editor.tscn`, `src/editor/` – **der Editor (Startszene)**: `editor.gd` (Ablauf,
+  Maßstäbe, Speichern, Vorführmodus), `landscape_view.gd` (Ausschnitt, Malen, Bäume, Umgebung),
+  `globe_view.gd`, `editor_ui.gd`, Shader `landscape`/`globe`.
+- `src/domain/world/` – Weltmodell: `world_document.gd`, `terrain_sampler.gd`,
+  `terrain_window.gd`, `stroke.gd`, `climate.gd`, `globe_math.gd`.
+- `scenes/main.tscn` – erster Schritt (einzelne Insel), nur noch zum Vergleich.
 - `scenes/lighting.tscn` – gemeinsames Licht (Himmel, Sonne, Nebel) für alle Szenen.
 - `scenes/style_test.tscn`, `src/style_test/` – Stiltest A/B (`docs/STILTEST.md`).
 - `tools/` – Ladeskript Poly Haven, Blender-Skripte, Stiltest-Messlauf.
@@ -127,7 +148,9 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
 Fester Blickwinkel, kein Drehen. Verschieben: W A S D / Pfeiltasten, rechte oder mittlere
 Maustaste ziehen, Trackpad mit zwei Fingern. Zoomen: Mausrad (zum Mauszeiger hin), + / −,
 Trackpad Finger spreizen oder Strg/Befehl + zwei Finger. Umschalt = schneller, Pos1 =
-Übersicht, F1 = Hilfe.
+Übersicht. Am Zoom-Anschlag weiterzoomen wechselt den Maßstab (hinein: Ausschnitt 1/8 unter
+dem Mauszeiger; hinaus: gröber, zuletzt Globus). Malen: Werkzeug wählen, linke Maustaste.
+Rückgängig Strg/⌘+Z, Wiederholen Strg/⌘+Y oder Strg/⌘+Umschalt+Z.
 
 ## Befehle
 Godot liegt auf dem Windows-PC unter
@@ -139,8 +162,12 @@ $godot = "C:\Users\Mattes\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-s
 & $godot --headless --path D:\WELTWERK --script res://tests/run_tests.gd        # Tests
 & $godot --path D:\WELTWERK                                                     # starten
 & $godot --path D:\WELTWERK -- --screenshot=C:\pfad\bild.png                    # Bild speichern, beenden
-& $godot --path D:\WELTWERK -- --view=-60,40,70 --screenshot=C:\pfad\nah.png    # Blick x,z,Abstand
+& $godot --path D:\WELTWERK -- --demo=D:\WELTWERK\docs\nachweis               # Nachweis vorführen (Bilder, Messwerte)
+& $godot --path D:\WELTWERK -- --welt=C:\pfad\welt.json --screenshot=C:\pfad\b.jpg  # andere Weltdatei, Bild
+& $godot --path D:\WELTWERK res://scenes/style_test.tscn                         # Stiltest
+powershell -ExecutionPolicy Bypass -File tools\run_style_test.ps1                # Stiltest messen
 ```
+Weltdatei: `user://welt.json` (Windows `%APPDATA%\Godot\app_userdata\Weltwerk\welt.json`).
 
 ## Entscheidungen
 - 21. 11. 2026 – Technik wie oben; erster Schritt: Gelände mit Sonne, Himmel, Schatten und
@@ -152,3 +179,7 @@ $godot = "C:\Users\Mattes\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-s
   Ausgangswert (`FixedRandom`), Teil-Ausgangswerte per `FixedRandom.derive(wert, "Bezeichnung")`.
   Keine Übernahme aus Wayfarer (dort mulberry32/FNV-1a) – gleiche Zahlen wie Wayfarer sind
   erst bei der späteren Anbindung zu klären.
+- 21. 11. 2026 – Plan des Spielleiters übernommen (`docs/PLAN.md`, Annahmen A1–A7). Weltmodell
+  „Erzeugung + Strichliste in Kontinentmetern“, Ansichten als Fenster mit Faktor 8,
+  Bearbeitungen in gröberen Ansichten vereinfacht und – wo zu klein – messingfarben markiert.
+  Standardgröße eines neuen Kontinents 1.600 km. Kein Name wird erzeugt.

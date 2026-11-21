@@ -1,0 +1,54 @@
+{
+  "gpu": "NVIDIA GeForce RTX 2070 SUPER",
+  "point": [
+    0.0,
+    0.0
+  ],
+  "resolution": "(1440.0, 900.0)",
+  "timing_ms": {
+    "30 Mausbewegungen beim Malen (je Bild)": 15.1837333333333,
+    "Kontur ändern (Kontinent neu berechnen)": 149.871,
+    "Vertiefen auf 200 km": 186.717,
+    "Vertiefen auf 25 km": 208.079,
+    "Zwei Striche im Ausschnitt (neu berechnen)": 1180.273
+  },
+  "views": {
+    "Ausschnitt 1:512 mit Bäumen": {
+      "draw_calls": 55.0,
+      "fps": 316.263035967014,
+      "frame_ms": 3.161925,
+      "primitives": 1626430.0,
+      "static_mem_mb": 79.5006999969482,
+      "video_mem_mb": 232.717437744141
+    },
+    "Globus": {
+      "draw_calls": 48.0,
+      "fps": 611.066412734624,
+      "frame_ms": 1.63648333333333,
+      "primitives": 744482.0,
+      "static_mem_mb": 75.3287620544434,
+      "video_mem_mb": 227.727172851563
+    },
+    "Kontinent": {
+      "draw_calls": 52.0,
+      "fps": 381.530126572619,
+      "frame_ms": 2.621025,
+      "primitives": 268688.0,
+      "static_mem_mb": 75.3414268493652,
+      "video_mem_mb": 227.727172851563
+    },
+    "Mit der Maus gemalt": {
+      "strokes_after": 4,
+      "strokes_before": 3
+    },
+    "Region 1:64": {
+      "draw_calls": 53.0,
+      "fps": 340.166908563135,
+      "frame_ms": 2.93973333333333,
+      "primitives": 923356.0,
+      "static_mem_mb": 80.9811935424805,
+      "video_mem_mb": 232.51432800293
+    }
+  },
+  "world_file": "D:\\WELTWERK\\docs\\nachweis/welt.json"
+}

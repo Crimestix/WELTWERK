@@ -1,0 +1,39 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://src/editor/editor.gd" id="1_editor"]
+[ext_resource type="Script" path="res://src/editor/landscape_view.gd" id="2_landscape"]
+[ext_resource type="Script" path="res://src/camera/strategy_camera.gd" id="3_camera"]
+[ext_resource type="Script" path="res://src/editor/globe_view.gd" id="4_globe"]
+[ext_resource type="Script" path="res://src/editor/editor_ui.gd" id="5_ui"]
+[ext_resource type="PackedScene" path="res://scenes/lighting.tscn" id="6_lighting"]
+
+[node name="Editor" type="Node3D"]
+script = ExtResource("1_editor")
+
+[node name="Lighting" parent="." instance=ExtResource("6_lighting")]
+
+[node name="Landscape" type="Node3D" parent="."]
+script = ExtResource("2_landscape")
+
+[node name="CameraRig" type="Node3D" parent="." node_paths=PackedStringArray("terrain", "sun")]
+script = ExtResource("3_camera")
+terrain = NodePath("../Landscape")
+sun = NodePath("../Lighting/Sun")
+min_distance = 150.0
+max_distance = 1200.0
+start_distance = 1100.0
+
+[node name="Camera3D" type="Camera3D" parent="CameraRig"]
+current = true
+fov = 50.0
+
+[node name="Globe" type="Node3D" parent="."]
+visible = false
+script = ExtResource("4_globe")
+
+[node name="Camera3D" type="Camera3D" parent="Globe"]
+fov = 40.0
+far = 6000.0
+
+[node name="Interface" type="CanvasLayer" parent="."]
+script = ExtResource("5_ui")

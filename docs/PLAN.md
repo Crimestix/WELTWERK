@@ -8,9 +8,9 @@ Kurzfassung des Auftrags „Sandbox Worldbuilder“ und Abgleich mit dem, was es
 | Auftrag | Stand | Nächster Schritt |
 |---|---|---|
 | Godot, 3D, feste Schrägkamera, verschieben und zoomen | vorhanden (erster Schritt) | Kamera für jede Ansicht wiederverwenden |
-| Stiltest: dieselbe Szene als A (vorhandener Bestand) und B (Blender), Arbeits- und Nahansicht, Herkunft, Aufwand, Messwerte | fehlt | **jetzt** (`scenes/style_test.tscn`, Bericht in `docs/STILTEST.md`) |
-| Landform → Globus → Kontinent → vertiefter Ausschnitt | fehlt | **jetzt**, als kleiner Nachweis |
-| Rückgängig/Wiederholen, Speichern, wiederholbare Erzeugung | nur feste Erzeugung | **jetzt**, im Nachweis |
+| Stiltest: dieselbe Szene als A (vorhandener Bestand) und B (Blender), Arbeits- und Nahansicht, Herkunft, Aufwand, Messwerte | **erledigt** | `docs/STILTEST.md` – Entscheidung des Spielleiters offen |
+| Landform → Globus → Kontinent → vertiefter Ausschnitt | **erledigt (Nachweis)** | `docs/NACHWEIS.md` |
+| Rückgängig/Wiederholen, Speichern, wiederholbare Erzeugung | **erledigt (Nachweis)** | `docs/NACHWEIS.md`, Tests |
 | Flüssiger Übergang zwischen Maßstäben | fehlt | im Aufbau berücksichtigt (A3), gebaut wird er später |
 | Festsetzen, Konfliktanzeige, Import, Flüsse am Gefälle | fehlt | nach dem Nachweis |
 | Leistung auf dem MacBook Air | nicht gemessen | Messung im Programm vorhanden, Lauf auf dem Mac steht aus |

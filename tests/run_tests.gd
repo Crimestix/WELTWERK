@@ -7,6 +7,7 @@ const SUITES := [
 	"res://tests/test_fixed_random.gd",
 	"res://tests/test_heightfield.gd",
 	"res://tests/test_style_landscape.gd",
+	"res://tests/test_world.gd",
 ]
 
 
