@@ -21,7 +21,7 @@ radiance_size = 3
 background_mode = 2
 sky = SubResource("Sky")
 ambient_light_source = 3
-ambient_light_energy = 0.85
+ambient_light_energy = 0.75
 reflected_light_source = 2
 tonemap_mode = 4
 tonemap_exposure = 1.1
@@ -39,8 +39,8 @@ fog_density = 0.0005
 fog_aerial_perspective = 0.12
 fog_sky_affect = 0.2
 adjustment_enabled = true
-adjustment_contrast = 1.08
-adjustment_saturation = 1.12
+adjustment_contrast = 1.13
+adjustment_saturation = 1.14
 
 [node name="TargetScene" type="Node3D"]
 script = ExtResource("1_scene")
@@ -51,7 +51,7 @@ environment = SubResource("Environment")
 [node name="Sun" type="DirectionalLight3D" parent="."]
 rotation = Vector3(-0.86, -2.05, 0)
 light_color = Color(1, 0.8, 0.54, 1)
-light_energy = 2.7
+light_energy = 2.75
 shadow_enabled = true
 shadow_bias = 0.05
 shadow_normal_bias = 1.5

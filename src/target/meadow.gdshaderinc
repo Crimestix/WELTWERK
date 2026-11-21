@@ -1,7 +1,11 @@
 // Gemeinsame Wiesenfarbe für Gelände und Grasbüschel (Palette nach dem Zielbild).
 // Beide Shader rechnen dieselbe Funktion an derselben Weltstelle – Gras und Boden passen zusammen.
 
-uniform vec3 meadow_light : source_color = vec3(0.72, 0.77, 0.26);
+// Umrechnung Darstellung → Meter (Editor-Ausschnitte sind normiert); in der Zielszene 1:1.
+uniform vec2 meadow_origin = vec2(0.0);
+uniform float meadow_scale = 1.0;
+
+uniform vec3 meadow_light : source_color = vec3(0.64, 0.74, 0.22);
 uniform vec3 meadow_mid : source_color = vec3(0.50, 0.63, 0.17);
 uniform vec3 meadow_deep : source_color = vec3(0.30, 0.46, 0.12);
 uniform vec3 meadow_dry : source_color = vec3(0.74, 0.62, 0.34);
@@ -29,6 +33,10 @@ float m_fbm(vec2 p) {
 		a *= 0.5;
 	}
 	return s;
+}
+
+vec2 to_meters(vec2 render_xz) {
+	return meadow_origin + render_xz / meadow_scale;
 }
 
 // Anteil trockener Stellen (0–1).

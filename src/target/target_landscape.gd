@@ -117,7 +117,7 @@ func background_trees() -> Array:
 		return (d < -6.0 or far_shore or p.y < -205.0) and height(p.x, p.y) > 2.5, Rect2(-310.0, -310.0, 620.0, 620.0))
 	var result := []
 	for p in points:
-		result.append([_upright(rng, p, 1.0, 1.45, -0.2), 3])
+		result.append([_upright(rng, p, 1.0, 1.45, -1.3), 3])
 	return result
 
 
@@ -129,6 +129,21 @@ func bushes() -> Array[Transform3D]:
 	var result: Array[Transform3D] = []
 	for p in points:
 		result.append(_upright(rng, p, 1.2, 2.4, -0.15))
+	return result
+
+
+## Unterholz an Waldrändern (gegenüberliegendes Ufer, hinterer Waldrand): verdeckt Stammreihen.
+func forest_edge_bushes() -> Array[Transform3D]:
+	var rng := FixedRandom.rng_of(FixedRandom.derive(SEED, "Waldrand"))
+	var points := _scatter(rng, 60000, 1400, 2.6, func(p: Vector2) -> bool:
+		var d := shore_distance(p.x, p.y)
+		var across := d - 0.3 * (p.y + 100.0)
+		var far_edge := across > 150.0 and across < 178.0 and height(p.x, p.y) > 0.6
+		var back_edge := p.y < -168.0 and p.y > -195.0 and d < -4.0
+		return far_edge or back_edge, Rect2(-310.0, -310.0, 620.0, 620.0))
+	var result: Array[Transform3D] = []
+	for p in points:
+		result.append(_upright(rng, p, 2.0, 3.4, -0.2))
 	return result
 
 
@@ -189,7 +204,7 @@ func grass(count: int) -> Array:
 		if shore_distance(p.x, p.y) > -1.8:
 			continue
 		var dry := clampf(dry_noise.get_noise_2d(p.x, p.y) * 2.5 - 0.55, 0.0, 1.0)
-		result.append([_upright(rng, p, 0.9, 1.7, -0.02), rng.randi_range(0, 7), dry])
+		result.append([_upright(rng, p, 1.0, 1.9, -0.02), rng.randi_range(0, 7), dry])
 	return result
 
 

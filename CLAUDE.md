@@ -26,8 +26,9 @@ Arbeitsname, noch nicht sicher. Visueller Kampagneneditor für Pen & Paper (D&D 
 - **Testfenster nie auf dem Hauptbildschirm** (Wunsch des Spielleiters, 21. 11. 2026): Godot mit
   `--position 2000,60` starten (rechter Bildschirm; Hauptbildschirm liegt bei 0,0, 1920×1080).
 - Higgsfield-Programm: `%LOCALAPPDATA%\Programs\higgsfield\higgsfield.exe` (Windows-Fassung,
-  nicht im Systempfad; angemeldet). Für Referenzbilder und Texturen; Kosten vorher mit
-  `generate cost` prüfen und im Bericht festhalten.
+  nicht im Systempfad; angemeldet). Für Referenzbilder, Atlanten, Texturen und 3D-Modelle
+  (Multi-Image to 3D ≈ 30 Guthaben, Bild ≈ 2). Erzeugung über `tools/higgsfield_assets.ps1`,
+  jede Anweisung wird protokolliert; Kosten im Bericht festhalten.
 - Bezeichner englisch; alle sichtbaren Texte deutsch, klare ganze Wörter, kein
   Entwicklerjargon, deutsche Regelbegriffe.
 
@@ -136,7 +137,14 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
   `terrain_window.gd`, `stroke.gd`, `climate.gd`, `globe_math.gd`.
 - `scenes/main.tscn` – erster Schritt (einzelne Insel), nur noch zum Vergleich.
 - `scenes/lighting.tscn` – gemeinsames Licht (Himmel, Sonne, Nebel) für alle Szenen.
-- `scenes/style_test.tscn`, `src/style_test/` – Stiltest A/B (`docs/STILTEST.md`).
+- `scenes/style_test.tscn`, `src/style_test/` – Stiltest A/B/C (`docs/STILTEST.md`).
+- `scenes/target_scene.tscn`, `src/target/` – Zielszene und gemeinsamer Zielstil:
+  `target_materials.gd` (Bäume, Felsen, Büsche, Gras – auch vom Editor genutzt),
+  `meadow.gdshaderinc` (eine Wiesenfarbe für Boden und Gras), `water_clear.gdshader`,
+  `rock_granite.gdshader`, `grass_cards.gdshader`, `target_landscape.gd` (Landschaft, rein).
+- `src/editor/landscape_detail.gdshader` – Editor-Boden im Zielstil (Ausschnitte bis 3,6 km).
+- `assets/target/` – Zielbestand (Blender-Skript + Higgsfield; Originale und Protokoll in
+  `assets/target/source/`, nur `generated.json` im Repository).
 - `tools/` – Ladeskript Poly Haven, Blender-Skripte, Stiltest-Messlauf.
 - `docs/` – Plan, Stiltest-Bericht (für Godot ausgeblendet per `.gdignore`).
 - `src/domain/` – reine Fachlogik: `fixed_random.gd` (fester Zufall), `heightfield.gd`
@@ -191,3 +199,9 @@ Weltdatei: `user://welt.json` (Windows `%APPDATA%\Godot\app_userdata\Weltwerk\we
   (sichtbare Stämme, lockere Kronen), Wildblumen und Halme, flechtige Granitbänke am Ufer,
   klares Wasser mit sichtbaren Steinen, türkis zu tiefblau, warmes Licht. Weg dorthin:
   Stiltest-Variante C (Blattkarten-Bäume, Higgsfield-Laub, Poly-Haven-Gelände mit Farbanpassung).
+- 21. 11. 2026 – Kontinent skalieren: **„Alles wächst mit.“** (Spielleiter) – Befehl `resize`.
+- 21. 11. 2026 – Auftrag „arbeite, bis wir beim Zielbild sind; nutze Higgsfield-Guthaben wie
+  nötig“. Ergebnis: Zielszene (`scenes/target_scene.tscn`, Bericht `docs/ZIEL.md`) und
+  Übertragung in die feinsten Editor-Ausschnitte. Die Editor-Kamera wird beim Hineinzoomen
+  flacher (52° → 30°, nur zoomabhängig, nicht drehbar) – sonst wirken Gras und Bäume von oben
+  wie Striche. Spielleiter hat 500 Higgsfield-Guthaben nachgelegt (Stand danach 561,85).

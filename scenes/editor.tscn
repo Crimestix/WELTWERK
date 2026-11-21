@@ -19,6 +19,7 @@ script = ExtResource("2_landscape")
 script = ExtResource("3_camera")
 terrain = NodePath("../Landscape")
 sun = NodePath("../Lighting/Sun")
+near_pitch_degrees = 30.0
 min_distance = 150.0
 max_distance = 1200.0
 start_distance = 1100.0

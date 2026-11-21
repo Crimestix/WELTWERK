@@ -11,13 +11,15 @@ signal hover_changed(x: float, y: float, valid: bool)
 
 const PLANE := 1000.0
 const SHADER := preload("res://src/editor/landscape.gdshader")
+const DETAIL_SHADER := preload("res://src/editor/landscape_detail.gdshader")
 const WATER_SHADER := preload("res://src/world/water.gdshader")
+const CLEAR_WATER_SHADER := preload("res://src/target/water_clear.gdshader")
 const FOLIAGE_SHADER := preload("res://src/style_test/foliage.gdshader")
-const TREE_PATHS := ["res://assets/style_c/trees/tree_c_1.glb", "res://assets/style_c/trees/tree_c_2.glb", "res://assets/style_c/trees/tree_c_3.glb"]
-const LEAF_CARDS_SHADER := preload("res://src/style_test/leaf_cards.gdshader")
-const LEAF_ATLAS := preload("res://assets/style_c/leaf_atlas.png")
 ## Bäume als einzelne Modelle erst ab diesem Ausschnitt (m) – darüber zeigt die Farbe den Wald.
 const TREES_BELOW := 3500.0
+## Ab hier Aussehen wie das Zielbild (Fototexturen, klares Wasser).
+const DETAIL_BELOW := 3600.0
+## Ab hier echte Bäume, Felsen, Büsche, Gras und Blumen im Zielstil.
 const DETAILED_TREES_BELOW := 450.0
 
 
@@ -44,11 +46,16 @@ var show_marks := true:
 
 var _ground: MeshInstance3D
 var _material: ShaderMaterial
+var _coarse_material: ShaderMaterial
+var _detail_material: ShaderMaterial
+var _water_material: ShaderMaterial
+var _clear_water_material: ShaderMaterial
 var _context: MeshInstance3D
 var _context_material: ShaderMaterial
 var _context_texture: ImageTexture
 var _water: MeshInstance3D
 var _trees: Node3D
+var _details: Node3D
 var _frames: MeshInstance3D
 var _field: Heightfield
 var _texture: ImageTexture
@@ -64,8 +71,18 @@ func _ready() -> void:
 	_ground = MeshInstance3D.new()
 	_ground.name = "Ground"
 	add_child(_ground)
-	_material = ShaderMaterial.new()
-	_material.shader = SHADER
+	_coarse_material = ShaderMaterial.new()
+	_coarse_material.shader = SHADER
+	_detail_material = ShaderMaterial.new()
+	_detail_material.shader = DETAIL_SHADER
+	var maps := {"grass": ["rocky_terrain_02", "diffuse"], "grass_normal": ["rocky_terrain_02", "nor_gl"],
+		"meadow": ["aerial_grass_rock", "diffuse"], "rock": ["rock_boulder_dry", "diffuse"],
+		"rock_normal": ["rock_boulder_dry", "nor_gl"], "bottom": ["river_small_rocks", "diffuse"],
+		"forest": ["brown_mud_leaves_01", "diffuse"]}
+	for slot in maps:
+		var name: String = slot if slot.ends_with("normal") else slot + "_albedo"
+		_detail_material.set_shader_parameter(name, TargetMaterials.polyhaven(maps[slot][0], maps[slot][1]))
+	_material = _coarse_material
 	_ground.material_override = _material
 
 	_context = MeshInstance3D.new()
@@ -83,17 +100,22 @@ func _ready() -> void:
 	_water.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var plane := PlaneMesh.new()
 	plane.size = Vector2(PLANE * 24.0, PLANE * 24.0)
-	var water_material := ShaderMaterial.new()
-	water_material.shader = WATER_SHADER
+	_water_material = ShaderMaterial.new()
+	_water_material.shader = WATER_SHADER
 	# Tiefenverlauf in Darstellungseinheiten: kurz, damit Meer außerhalb des Ausschnitts gleich aussieht.
-	water_material.set_shader_parameter("depth_fade", 2.5)
-	plane.material = water_material
+	_water_material.set_shader_parameter("depth_fade", 2.5)
+	_clear_water_material = ShaderMaterial.new()
+	_clear_water_material.shader = CLEAR_WATER_SHADER
+	plane.material = _water_material
 	_water.mesh = plane
 	add_child(_water)
 
 	_trees = Node3D.new()
 	_trees.name = "Trees"
 	add_child(_trees)
+	_details = Node3D.new()
+	_details.name = "Details"
+	add_child(_details)
 
 	_frames = MeshInstance3D.new()
 	_frames.name = "RegionFrames"
@@ -122,7 +144,18 @@ func show_window(w: TerrainWindow, p_sampler: TerrainSampler, regions: Array, pa
 		_ground.mesh = mesh
 		_mesh_res = w.res
 		_texture = null
+	var detail := w.size <= DETAIL_BELOW
+	_material = _detail_material if detail else _coarse_material
+	_ground.material_override = _material
 	_upload()
+	_material.set_shader_parameter("data_tex", _texture)
+	if detail:
+		_detail_material.set_shader_parameter("meadow_origin", Vector2(w.cx, -w.cy))
+		_detail_material.set_shader_parameter("meadow_scale", units_per_m)
+		# Wasser in Darstellungseinheiten: Tiefen und Schluckweg auf Meter umrechnen.
+		_clear_water_material.set_shader_parameter("deep_depth", 7.0 * height_scale)
+		_clear_water_material.set_shader_parameter("absorption", Vector3(0.42, 0.11, 0.07) / height_scale)
+	(_water.mesh as PlaneMesh).material = _clear_water_material if detail else _water_material
 	_material.set_shader_parameter("res", w.res)
 	_material.set_shader_parameter("plane_size", PLANE)
 	_material.set_shader_parameter("height_scale", height_scale)
@@ -133,6 +166,7 @@ func show_window(w: TerrainWindow, p_sampler: TerrainSampler, regions: Array, pa
 	_material.set_shader_parameter("show_marks", show_marks)
 	_rebuild_field()
 	_build_trees()
+	_build_details()
 	_build_frames(regions)
 
 
@@ -248,6 +282,7 @@ func _finish_stroke() -> void:
 	_painting = false
 	_rebuild_field()
 	_build_trees()
+	_build_details()
 	stroke_finished.emit(_stroke)
 	_stroke = {}
 
@@ -386,11 +421,18 @@ func _build_trees() -> void:
 			var h := window.height_at(x, y)
 			if h < 1.0:
 				continue
-			var tree_height := 9.0 + 7.0 * _hash01(gx, gy, seed_value, 4)
 			var pick := int(_hash01(gx, gy, seed_value, 5) * options.size()) % options.size()
-			var s := tree_height * units_per_m
+			var s: float
+			var sink: float
+			if detailed:
+				# Zielbäume in echter Größe (10–12 m), leicht gestreut.
+				s = units_per_m * (0.85 + 0.35 * _hash01(gx, gy, seed_value, 4))
+				sink = 0.25 * units_per_m
+			else:
+				s = (9.0 + 7.0 * _hash01(gx, gy, seed_value, 4)) * units_per_m
+				sink = 0.3 * s
 			var basis := Basis(Vector3.UP, _hash01(gx, gy, seed_value, 6) * TAU).scaled(Vector3(s, s, s))
-			var pos := Vector3((x - window.cx) * units_per_m, h * height_scale - 0.3 * s, -(y - window.cy) * units_per_m)
+			var pos := Vector3((x - window.cx) * units_per_m, h * height_scale - sink, -(y - window.cy) * units_per_m)
 			per_option[pick].append(Transform3D(basis, pos))
 	for o in options.size():
 		var list: Array = per_option[o]
@@ -425,38 +467,119 @@ func _tree_options(detailed: bool) -> Array:
 			_blob_mesh = sphere
 		return [[[_blob_mesh, Transform3D(Basis(), Vector3(0.0, 0.62, 0.0))]]]
 	if _tree_meshes.is_empty():
-		for path in TREE_PATHS:
-			var scene: PackedScene = load(path)
-			if scene == null:
-				continue
-			var root := scene.instantiate()
-			var parts := []
-			for node in root.find_children("*", "MeshInstance3D", true, false):
-				var mi := node as MeshInstance3D
-				var mesh: Mesh = mi.mesh.duplicate()
-				for s in mesh.get_surface_count():
-					var original := mesh.surface_get_material(s)
-					var name := original.resource_name if original else ""
-					if name.begins_with("LeafCards"):
-						var cards := ShaderMaterial.new()
-						cards.shader = LEAF_CARDS_SHADER
-						cards.set_shader_parameter("leaf_atlas", LEAF_ATLAS)
-						mesh.surface_set_material(s, cards)
-					elif name.begins_with("Leaves"):
-						var leaf := ShaderMaterial.new()
-						leaf.shader = FOLIAGE_SHADER
-						mesh.surface_set_material(s, leaf)
-					else:
-						var bark := StandardMaterial3D.new()
-						bark.vertex_color_use_as_albedo = true
-						bark.roughness = 0.95
-						mesh.surface_set_material(s, bark)
-				var aabb := mesh.get_aabb()
-				var scale := 1.0 / maxf(aabb.size.y, 0.01)
-				parts.append([mesh, Transform3D(Basis.from_scale(Vector3(scale, scale, scale)), -Vector3(0.0, aabb.position.y, 0.0) * scale)])
-			root.free()
-			_tree_meshes.append(parts)
+		# Zielbäume (Eiche häufiger), echte Größe in Metern.
+		for file in ["oak_1", "oak_2", "oak_3", "beech_1", "beech_2", "young_1", "oak_1"]:
+			var mesh := TargetMaterials.tree_mesh(file)
+			if mesh:
+				_tree_meshes.append([[mesh, Transform3D()]])
 	return _tree_meshes
+
+
+# --- Beiwerk im feinsten Ausschnitt ----------------------------------------------------------
+
+## Felsen am Ufer und an Steilstellen, Büsche, Gras und Blumen – fest je Weltzelle.
+func _build_details() -> void:
+	for child in _details.get_children():
+		child.queue_free()
+	if window.size > DETAILED_TREES_BELOW:
+		return
+	var seed_value: int = sampler.continent["seed"]
+	var u := units_per_m
+	var rocks := [[], []]
+	var bushes := [[], [], []]
+	_scan(6.0, 11, func(gx: int, gy: int, x: float, y: float, h: float) -> void:
+		var near_water := minf(minf(window.height_at(x + 5.0, y), window.height_at(x - 5.0, y)),
+			minf(window.height_at(x, y + 5.0), window.height_at(x, y - 5.0))) < -0.3
+		var steep := absf(window.height_at(x + 3.0, y) - window.height_at(x - 3.0, y)) > 5.0
+		var r := _hash01(gx, gy, seed_value, 12)
+		if (near_water and h > -1.2 and h < 1.8 and r < 0.55) or (steep and r < 0.12):
+			var s := u * (1.2 + 2.2 * _hash01(gx, gy, seed_value, 13))
+			var basis := Basis(Vector3.UP, _hash01(gx, gy, seed_value, 14) * TAU).scaled(Vector3(s * 1.6, s, s * 1.3))
+			rocks[int(r * 20.0) % 2].append(Transform3D(basis, _render(x, y, h) - Vector3(0.0, 0.35 * s, 0.0)))
+		elif h > 0.8 and r > 0.93 and window.forest_at(x, y) < 0.6:
+			var b := u * (1.2 + 1.2 * _hash01(gx, gy, seed_value, 15))
+			var basis := Basis(Vector3.UP, r * 97.0).scaled(Vector3(b, b, b))
+			bushes[int(r * 300.0) % 3].append(Transform3D(basis, _render(x, y, h)))
+	)
+	for k in 2:
+		_add_multimesh(_details, TargetMaterials.rock_mesh(TargetMaterials.ROCKS[k]), rocks[k], true)
+	for k in 3:
+		_add_multimesh(_details, TargetMaterials.bush_mesh(TargetMaterials.BUSHES[k]), bushes[k], true)
+
+	# Gras und Blumen: dicht auf offener Wiese, nicht im Wald, nicht im Wasser.
+	var grass := []
+	var flowers := []
+	_scan(0.85, 21, func(gx: int, gy: int, x: float, y: float, h: float) -> void:
+		if h < 0.7 or window.forest_at(x, y) > 0.45:
+			return
+		var r := _hash01(gx, gy, seed_value, 22)
+		var s := u * (1.3 + 0.9 * _hash01(gx, gy, seed_value, 23))
+		var basis := Basis(Vector3.UP, r * 97.0).scaled(Vector3(s, s, s))
+		var xform := Transform3D(basis, _render(x, y, h) - Vector3(0.0, 0.02 * u, 0.0))
+		if r < 0.045:
+			flowers.append([xform, int(_hash01(gx, gy, seed_value, 24) * 8.0)])
+		else:
+			grass.append([xform, int(r * 8.0) % 8])
+	)
+	_add_cards(grass, TargetMaterials.texture(TargetMaterials.T + "grass_atlas.png"), 0.6, 1.1, false)
+	_add_cards(flowers, TargetMaterials.texture(TargetMaterials.T + "flower_atlas.png"), 0.6, 0.55, true)
+
+
+## Geht ein Weltgitter (Abstand spacing in m) im Ausschnitt durch; Punkt je Zelle fest verschoben.
+func _scan(spacing: float, salt: int, visit: Callable) -> void:
+	var seed_value: int = sampler.continent["seed"]
+	var half := window.size * 0.5
+	for gy in range(int(floor((window.cy - half) / spacing)), int(ceil((window.cy + half) / spacing)) + 1):
+		for gx in range(int(floor((window.cx - half) / spacing)), int(ceil((window.cx + half) / spacing)) + 1):
+			var x := (gx + _hash01(gx, gy, seed_value, salt)) * spacing
+			var y := (gy + _hash01(gx, gy, seed_value, salt + 1)) * spacing
+			if window.contains(x, y):
+				visit.call(gx, gy, x, y, window.height_at(x, y))
+
+
+func _render(x: float, y: float, h: float) -> Vector3:
+	return Vector3((x - window.cx) * units_per_m, h * height_scale, -(y - window.cy) * units_per_m)
+
+
+func _add_multimesh(parent: Node3D, mesh: Mesh, transforms: Array, shadows: bool) -> void:
+	if mesh == null or transforms.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = transforms.size()
+	for i in transforms.size():
+		mm.set_instance_transform(i, transforms[i])
+	var inst := MultiMeshInstance3D.new()
+	inst.multimesh = mm
+	if not shadows:
+		inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(inst)
+
+
+func _add_cards(entries: Array, atlas: Texture2D, height: float, width: float, flowers: bool) -> void:
+	if atlas == null or entries.is_empty():
+		return
+	var mesh := TargetMaterials.tuft_mesh(width, height, atlas, flowers)
+	var material := mesh.surface_get_material(0) as ShaderMaterial
+	material.set_shader_parameter("meadow_origin", Vector2(window.cx, -window.cy))
+	material.set_shader_parameter("meadow_scale", units_per_m)
+	material.set_shader_parameter("fade_start", 280.0)
+	material.set_shader_parameter("fade_end", 420.0)
+	material.set_shader_parameter("calm_start", 60.0)
+	material.set_shader_parameter("calm_end", 240.0)
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	mm.mesh = mesh
+	mm.instance_count = entries.size()
+	for i in entries.size():
+		mm.set_instance_transform(i, entries[i][0])
+		mm.set_instance_custom_data(i, Color(float(entries[i][1]) / 8.0, 0.0, float(i % 97) / 97.0, 0.0))
+	var inst := MultiMeshInstance3D.new()
+	inst.multimesh = mm
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_details.add_child(inst)
 
 
 static func _hash01(gx: int, gy: int, seed_value: int, salt: int) -> float:

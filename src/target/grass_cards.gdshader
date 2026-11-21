@@ -45,7 +45,7 @@ void vertex() {
 	float dist = length(wp - CAMERA_POSITION_WORLD);
 	float keep = smoothstep(fade_end, fade_start, dist);
 	calm = smoothstep(calm_start, calm_end, dist);
-	root_color = meadow_color(MODEL_MATRIX[3].xz);
+	root_color = meadow_color(to_meters(MODEL_MATRIX[3].xz));
 	float top = 1.0 - UV.y;
 	VERTEX.y *= keep;
 	float sway = sin(TIME * 1.6 + wp.x * 0.45 + wp.z * 0.3) + 0.5 * sin(TIME * 3.1 + wp.x * 1.3);

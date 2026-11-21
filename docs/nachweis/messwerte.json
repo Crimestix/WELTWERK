@@ -6,44 +6,44 @@
   ],
   "resolution": "(1440.0, 900.0)",
   "timing_ms": {
-    "30 Mausbewegungen beim Malen (je Bild)": 15.2566,
-    "Kontur ändern (Kontinent neu berechnen)": 158.898,
-    "Vertiefen auf 200 km": 193.828,
-    "Vertiefen auf 25 km": 216.198,
-    "Zwei Striche im Ausschnitt (neu berechnen)": 1245.194
+    "30 Mausbewegungen beim Malen (je Bild)": 15.3348333333333,
+    "Kontur ändern (Kontinent neu berechnen)": 163.624,
+    "Vertiefen auf 200 km": 204.016,
+    "Vertiefen auf 25 km": 206.672,
+    "Zwei Striche im Ausschnitt (neu berechnen)": 1198.72
   },
   "views": {
     "Ausschnitt 1:4096 mit Blattkarten-Bäumen": {
-      "draw_calls": 86.0,
-      "fps": 107.777880565942,
-      "frame_ms": 9.27834166666667,
-      "primitives": 1332658.0,
-      "static_mem_mb": 81.6700048446655,
-      "video_mem_mb": 268.195053100586
+      "draw_calls": 158.0,
+      "fps": 37.2443871156767,
+      "frame_ms": 26.8496833333333,
+      "primitives": 2008784.0,
+      "static_mem_mb": 123.881448745728,
+      "video_mem_mb": 369.31120300293
     },
     "Ausschnitt 1:512 mit Bäumen": {
       "draw_calls": 55.0,
-      "fps": 300.374717460031,
-      "frame_ms": 3.329175,
+      "fps": 256.841618615881,
+      "frame_ms": 3.89345,
       "primitives": 1626430.0,
-      "static_mem_mb": 80.2287855148315,
-      "video_mem_mb": 268.052886962891
+      "static_mem_mb": 97.9642133712769,
+      "video_mem_mb": 310.498931884766
     },
     "Globus": {
-      "draw_calls": 48.0,
-      "fps": 564.092680427394,
-      "frame_ms": 1.77275833333333,
-      "primitives": 744482.0,
-      "static_mem_mb": 76.0568475723267,
-      "video_mem_mb": 263.062622070313
+      "draw_calls": 47.0,
+      "fps": 567.137233031963,
+      "frame_ms": 1.76324166666667,
+      "primitives": 596258.0,
+      "static_mem_mb": 93.7065515518188,
+      "video_mem_mb": 305.508422851563
     },
     "Kontinent": {
       "draw_calls": 52.0,
-      "fps": 330.725197677207,
-      "frame_ms": 3.02365833333333,
+      "fps": 361.628776007136,
+      "frame_ms": 2.76526666666667,
       "primitives": 268688.0,
-      "static_mem_mb": 76.0695123672485,
-      "video_mem_mb": 263.062622070313
+      "static_mem_mb": 93.7189531326294,
+      "video_mem_mb": 305.508422851563
     },
     "Mit der Maus gemalt": {
       "strokes_after": 4,
@@ -51,11 +51,19 @@
     },
     "Region 1:64": {
       "draw_calls": 53.0,
-      "fps": 319.521995095337,
-      "frame_ms": 3.129675,
+      "fps": 294.88738987799,
+      "frame_ms": 3.391125,
       "primitives": 923356.0,
-      "static_mem_mb": 81.7092790603638,
-      "video_mem_mb": 267.84977722168
+      "static_mem_mb": 99.3900346755981,
+      "video_mem_mb": 310.29557800293
+    },
+    "Uferausschnitt 1:4096 im Zielstil": {
+      "draw_calls": 98.0,
+      "fps": 141.542148892904,
+      "frame_ms": 7.06503333333333,
+      "primitives": 2391467.0,
+      "static_mem_mb": 154.830303192139,
+      "video_mem_mb": 373.905578613281
     }
   },
   "world_file": "D:\\WELTWERK\\docs\\nachweis/welt.json"

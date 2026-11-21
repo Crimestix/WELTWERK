@@ -15,6 +15,9 @@ extends Node3D
 @export_group("Blick")
 ## Neigung der Kamera über dem Horizont in Grad (fest).
 @export_range(20.0, 89.0) var pitch_degrees: float = 52.0
+## Neigung ganz nah (< 0: aus). Wie in Aufbauspielen wird der Blick beim Hineinzoomen flacher –
+## nur abhängig vom Zoom, nicht frei drehbar.
+@export var near_pitch_degrees: float = -1.0
 ## Himmelsrichtung, aus der die Kamera schaut, in Grad (fest; 0 = von Süden).
 @export_range(-180.0, 180.0) var yaw_degrees: float = 0.0
 @export var min_distance: float = 8.0
@@ -182,7 +185,7 @@ func ground_point_under(screen_position: Vector2) -> Variant:
 ## Verschiebt die Welt mit dem Mauszeiger („anfassen und ziehen“).
 func _pan_by_pixels(relative: Vector2) -> void:
 	var meters_per_pixel := _visible_height() / maxf(get_viewport().get_visible_rect().size.y, 1.0)
-	var forward_scale := 1.0 / maxf(sin(deg_to_rad(pitch_degrees)), 0.3)
+	var forward_scale := 1.0 / maxf(sin(deg_to_rad(current_pitch())), 0.3)
 	var shift := (_right() * -relative.x + _ground_forward() * relative.y * forward_scale) * meters_per_pixel
 	_target_focus += shift
 	_focus += shift
@@ -205,8 +208,16 @@ func _visible_height() -> float:
 	return 2.0 * _distance * tan(deg_to_rad(camera.fov * 0.5))
 
 
+## Aktuelle Neigung in Grad (fest oder mit dem Zoom flacher).
+func current_pitch() -> float:
+	if near_pitch_degrees < 0.0:
+		return pitch_degrees
+	var t := smoothstep(min_distance, lerpf(min_distance, max_distance, 0.6), _distance)
+	return lerpf(near_pitch_degrees, pitch_degrees, t)
+
+
 func _view_direction() -> Vector3:
-	var pitch := deg_to_rad(pitch_degrees)
+	var pitch := deg_to_rad(current_pitch())
 	var yaw := deg_to_rad(yaw_degrees)
 	return Vector3(-sin(yaw) * cos(pitch), -sin(pitch), -cos(yaw) * cos(pitch))
 

@@ -77,6 +77,7 @@ func _ready() -> void:
 	ui.placement_changed.connect(_on_placement)
 	ui.set_saved(true)
 
+	_apply_target_light()
 	_rebuild_sampler()
 	open_continent()
 
@@ -89,6 +90,27 @@ func _ready() -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_CLOSE_REQUEST and doc:
 		_save_now()
+
+
+## Licht wie in der Zielszene: warme Sonne von links hinten, weiche Verschattung.
+func _apply_target_light() -> void:
+	var sun: DirectionalLight3D = $Lighting/Sun
+	sun.rotation = Vector3(-0.86, -2.05, 0.0)
+	sun.light_color = Color(1.0, 0.8, 0.54)
+	sun.light_energy = 2.75
+	sun.shadow_bias = 0.12
+	sun.shadow_normal_bias = 2.6
+	var env: Environment = $Lighting/WorldEnvironment.environment
+	env.ambient_light_energy = 0.75
+	env.tonemap_exposure = 1.1
+	env.ssao_enabled = true
+	env.ssao_radius = 2.0
+	env.ssao_intensity = 0.7
+	env.adjustment_contrast = 1.13
+	env.adjustment_saturation = 1.14
+	var sky := env.sky.sky_material as ProceduralSkyMaterial
+	sky.sky_top_color = Color(0.2, 0.42, 0.75)
+	sky.sky_horizon_color = Color(0.74, 0.84, 0.93)
 
 
 func continent() -> Dictionary:
@@ -503,6 +525,28 @@ func _run_demo(dir: String) -> void:
 		await _frames(20)
 		await _shot(dir.path_join("13_ausschnitt_390m.jpg"))
 		await _measure("Ausschnitt 1:4096 mit Blattkarten-Bäumen", results)
+
+	# Uferausschnitt (1:4096) im Zielstil: Felsen, klares Flachwasser, Wiese, Bäume.
+	open_continent()
+	var half2: float = continent()["size_km"] * 500.0
+	var direction := Vector2(-0.3, -1.0).normalized()
+	var shore := _find_coast(direction, half2)
+	# Grob vertiefen, dann die Küste im feinen Ausschnitt selbst suchen (grob ist sie Kilometer ungenau).
+	for i in 3:
+		deepen_at(landscape.to_render(shore.x, shore.y))
+	var w: TerrainWindow = levels.back()["window"]
+	var scan_from := Vector2(w.cx, w.cy) - direction * w.size * 0.45
+	for s in 400:
+		var q := scan_from + direction * (w.size * 0.9 * s / 400.0)
+		if w.height_at(q.x, q.y) < -0.5:
+			shore = q
+			break
+	var center := shore - direction * 110.0
+	deepen_at(landscape.to_render(center.x, center.y))
+	camera_rig.jump_to(landscape.to_render(shore.x, shore.y).lerp(Vector3.ZERO, 0.15), camera_rig.min_distance * 1.15)
+	await _frames(25)
+	await _shot(dir.path_join("14_ufer_390m.jpg"))
+	await _measure("Uferausschnitt 1:4096 im Zielstil", results)
 
 	_save_now()
 	var report := {"views": results, "timing_ms": timing, "point": [p.x, p.y], "world_file": ProjectSettings.globalize_path(save_path),
