@@ -395,6 +395,7 @@ func _follow_parents() -> void:
 ## Mitführen: Nähert sich der Blickpunkt dem Rand eines feineren Ausschnitts, wandert der Ausschnitt
 ## mit. Die Stelle unter dem Blickpunkt bleibt dabei an ihrem Platz im Bild.
 func _process(_delta: float) -> void:
+	_update_scale_bar()
 	if in_globe or levels.size() <= 1 or landscape.is_busy() or landscape.window == null:
 		return
 	var f := camera_rig.focus_point()
@@ -500,6 +501,7 @@ func _on_zoom_limit(inward: bool, screen_position: Vector2) -> void:
 		zoom_out()
 
 
+## Pfad oben: 0 = Welt, 1 = Kontinent, 2 = Region (die aktuelle – bleibt, wo sie ist).
 func _on_level_pressed(index: int) -> void:
 	if index == 0:
 		open_globe()
@@ -507,11 +509,10 @@ func _on_level_pressed(index: int) -> void:
 	if in_globe:
 		open_continent(active_id)
 		return
-	var target := index - 1
-	if target >= levels.size() - 1:
+	if index >= 2 or levels.size() <= 1:
 		return
-	var child: Dictionary = levels[target + 1]
-	levels.resize(target + 1)
+	var child: Dictionary = levels[1]
+	levels.resize(1)
 	_show_level()
 	camera_rig.jump_to(landscape.to_render(child["cx"], child["cy"]), camera_rig.min_distance * 1.3)
 	_queue_view()
@@ -791,13 +792,13 @@ func _restore_view() -> bool:
 # --- Anzeige -------------------------------------------------------------------------------
 
 func _update_ui() -> void:
+	# Pfad: Welt / Kontinent / Region – die Stufen feinerer Ausschnitte bilden keine Kette.
 	var names := ["Welt"]
 	if active_id != "":
 		names.append(display_name(active_id))
-		if not in_globe:
-			for i in range(1, levels.size()):
-				names.append("Region 1:%d" % int(pow(FACTOR, i)))
-	var current := 0 if in_globe else levels.size()
+		if not in_globe and levels.size() > 1:
+			names.append("Region")
+	var current := 0 if in_globe else mini(levels.size(), 2)
 	ui.set_levels(names, current)
 	ui.set_mode(in_globe, levels.size() == 1, active_id != "")
 	ui.set_history(doc.can_undo(), doc.can_redo())
@@ -805,14 +806,19 @@ func _update_ui() -> void:
 	ui.set_continent_count(doc.continents.size())
 	var notice := _notice
 	_notice = ""
+	if notice != "":
+		ui.show_notice(notice)
 	if active_id == "":
-		ui.set_status((notice + " · " if notice != "" else "") + "Globus · Ziehen dreht · „Neu zeichnen“ oder „Neu erzeugen“ legt einen Kontinent an")
+		ui.set_facts("")
+		ui.set_warning("")
+		ui.set_variant_available(false)
 		return
 	var c := continent()
 	var s := sampler_for(active_id)
 	ui.set_placement(c, s.climate)
 	var strokes: Array = c["strokes"]
 	ui.set_reroll_available(not strokes.is_empty() and Stroke.is_generator(strokes.back()))
+	ui.set_variant_available(c["base"] == WorldDocument.BASE_GENERATED)
 	var stats := globe_window(active_id).land_stats()
 	var extent := ""
 	if stats["area_km2"] > 0.0:
@@ -824,17 +830,35 @@ func _update_ui() -> void:
 			EditorUI.meters(hi.x - lo.x + globe_window(active_id).cell), EditorUI.meters(hi.y - lo.y + globe_window(active_id).cell),
 			_lat_text(south.x), _lat_text(north.x)]
 	else:
-		extent = "noch kein Land"
-	var origin := "%s · %d Bearbeitung%s" % ["gezeichnete Grundform" if c["base"] == WorldDocument.BASE_DRAWN else "Grundform erzeugt (Ausgangswert %d)" % c["seed"],
+		extent = "Noch kein Land"
+	var origin := "%s · %d Bearbeitung%s" % ["Gezeichnete Grundform" if c["base"] == WorldDocument.BASE_DRAWN else "Erzeugte Grundform (Ausgangswert %d)" % c["seed"],
 		strokes.size(), "" if strokes.size() == 1 else "en"]
-	var overlap := _overlap_text()
-	var prefix := (notice + " · ") if notice != "" else ""
+	ui.set_warning(_overlap_text().trim_prefix(" · "))
 	if in_globe:
-		ui.set_status(prefix + "%s · %s · %s%s" % [display_name(active_id), extent, origin, overlap])
+		ui.set_facts(extent + "
+" + origin)
 	else:
 		var level: Dictionary = levels.back()
-		ui.set_status(prefix + "Ausschnitt %s · %s · Höhen %s-fach überhöht · Klima: %s" % [
-			EditorUI.meters(level["size"]), extent, String.num(landscape.exaggeration, 1).replace(".", ","), s.climate["zone"]])
+		ui.set_facts("%s
+Klima: %s
+Ausschnitt %s · Höhen %s-fach überhöht
+%s" % [extent, s.climate["zone"],
+			EditorUI.meters(level["size"]), String.num(landscape.exaggeration, 1).replace(".", ","), origin])
+
+
+## Maßstab unten links: Meter je Bildpunkt in der Bildmitte (waagrecht, auf Meereshöhe).
+func _update_scale_bar() -> void:
+	if in_globe or landscape.window == null:
+		return
+	var cam := camera_rig.camera
+	var center := get_viewport().get_visible_rect().size * 0.5
+	var ground := Plane(Vector3.UP, 0.0)
+	var side := center + Vector2(40.0, 0.0)
+	var a: Variant = ground.intersects_ray(cam.project_ray_origin(center), cam.project_ray_normal(center))
+	var b: Variant = ground.intersects_ray(cam.project_ray_origin(side), cam.project_ray_normal(side))
+	if a == null or b == null:
+		return
+	ui.set_scale_bar((a as Vector3).distance_to(b) / 40.0 / landscape.units_per_m)
 
 
 ## Reicht ein Strich (mit Radius) über den Ausschnitt hinaus? Dann ändert er auch die Umgebung.
