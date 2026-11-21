@@ -31,6 +31,9 @@ const GRID_SPACING := 25000.0 / 40.0
 ## Prüfraster im Maßstab des Kontinents: 13 × 13 Punkte im Abstand 10 km (120 km).
 const CONTINENT_GRID := 13
 const CONTINENT_SPACING := 10000.0
+## Erlaubte Abweichung eines Rasterpunkts vom Zellmittel des feinen Geländes (m): Zusammenfassung
+## über gespeicherte Detailregionen; Rest aus der Interpolation der feineren Stufen.
+const NODE_TOLERANCE := 10
 ## Haupttalachse: ± so weit entlang des Tals (Richtung aus der Talsuche im 200-km-Ausschnitt).
 const VALLEY_HALF := 10000.0
 const BRASS := Color(0.88, 0.70, 0.38)
@@ -121,6 +124,13 @@ func _step_one(dir: String) -> void:
 			var path := dir.path_join("ort_%s_%d.jpg" % [p["key"], level])
 			await _view(p, level, path)
 			tiles.append(path)
+			windows.append(editor._level_window(level))
+		# Gemessen wird der Stand nach dem Hinabsteigen – so, wie die Stufen beim Herauszoomen
+		# erscheinen: Jedes Vertiefen hat eine Detailregion angelegt, die gröberen Stufen fassen sie
+		# jetzt zusammen (die Bilder oben entstanden auf dem Weg hinab).
+		editor._forget_windows()
+		windows.clear()
+		for level in LEVELS:
 			windows.append(editor._level_window(level))
 		_measure(p, windows)
 		_continent_scale(p, windows)
@@ -310,6 +320,30 @@ func _measure(p: Dictionary, windows: Array) -> void:
 				names[level], int(round(worst)), int(round(worst_tol))]] = inside
 			checks["%s · %s: kein Höhenversatz (Mittel %+d m, erlaubt ±%d m)" % [p["name"], names[level],
 				int(round(bias)), int(round(limit))]] = absf(bias) <= limit
+			# Zusammenfassung an den Rasterpunkten selbst: Höhe eines Punkts dieser Stufe = Mittel des
+			# feinsten angezeigten Geländes über seine quadratische Zelle (3 × 3 Punkte um die Stelle).
+			# Zwischen den Punkten wird interpoliert – das prüfen die beiden Zeilen davor.
+			var node_worst := -1.0
+			var g := w.grid_of(at.x, at.y)
+			for dj in range(-1, 2):
+				for di in range(-1, 2):
+					var ni := int(round(g.x)) + di
+					var nj := int(round(g.y)) + dj
+					if ni < 0 or nj < 0 or ni >= w.res or nj >= w.res:
+						continue
+					var node := Vector2(w.x_at(ni), w.y_at(nj))
+					var source: TerrainWindow = null
+					for finer in range(LEVELS - 1, level, -1):
+						if Landmarks.fits(windows[finer], node, w.cell * 0.5 * sqrt(2.0)):
+							source = windows[finer]
+							break
+					if source == null:
+						continue
+					node_worst = maxf(node_worst, absf(w.height[nj * w.res + ni] - _square_mean(source, node, w.cell)))
+			entry["node_worst_diff_m"] = node_worst
+			if node_worst >= 0.0:
+				checks["%s · %s: Rasterpunkte = Zellmittel des feinen Geländes (größte Abweichung %.1f m, erlaubt %d m)" % [
+					p["name"], names[level], node_worst, NODE_TOLERANCE]] = node_worst <= NODE_TOLERANCE
 		var form := Landmarks.classify(w, ref, p["kind"], at, p["scale"], p["axis"])
 		entry["form"] = form
 		var what: String = {"peak": "bleibt Höchstpunkt", "pass": "bleibt Sattel", "valley": "bleibt Tiefstpunkt"}[p["kind"]]
@@ -480,10 +514,31 @@ func _edits(dir: String) -> void:
 	checks["Gespeichert = geladen"] = reloaded != null and editor.same_data(editor.doc.to_dict(), reloaded.to_dict())
 
 
+## Mittel eines Ausschnitts über die quadratische Zelle der Weite cell um p (n × n Stichproben).
+static func _square_mean(fine: TerrainWindow, p: Vector2, cell: float, n: int = 48) -> float:
+	var sum := 0.0
+	for sj in n:
+		for si in n:
+			sum += fine.height_at(p.x + ((si + 0.5) / n - 0.5) * cell, p.y + ((sj + 0.5) / n - 0.5) * cell)
+	return sum / float(n * n)
+
+
 ## Eigener, frischer Sampler ohne zwischengespeicherte Grundform – unabhängig vom Editor.
 func _fresh_sampler() -> TerrainSampler:
-	TerrainSampler.clear_base_cache()
-	return TerrainSampler.new(editor.continent(), editor.doc.planet)
+	# Eigene, leere Zwischenspeicher (Grundform, Regionsergebnisse, keine Zwischenstände von der
+	# Platte): alles wird neu gerechnet, ohne die Zwischenspeicher des Editors zu leeren – dessen
+	# gemessene Zeiten bleiben so wie im Gebrauch.
+	var s := TerrainSampler.new(editor.continent(), editor.doc.planet)
+	s.private_caches = true
+	# Dieselben gespeicherten Detailregionen wie der Editor (frisch von der Platte gelesen).
+	RegionStore.clear_cache()
+	var list := []
+	for data in editor._region_data(editor.active_id):
+		var own: Dictionary = data.duplicate()
+		own.erase("result_path")
+		list.append(own)
+	s.set_regions(list)
+	return s
 
 
 func _stroke_count() -> int:

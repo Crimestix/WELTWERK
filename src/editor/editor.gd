@@ -18,6 +18,8 @@ const FACTOR := 8.0
 const SMALLEST := 190.0
 ## Auflösung der Kontinentbilder auf dem Globus und in der Übersichtskarte.
 const GLOBE_RES := 129
+## Raster einer Detailregion (gespeichert).
+const REGION_RES := 257
 ## Raster der Kontinentansicht (feiner als Regionen, die nur einen Ausschnitt zeigen).
 const CONTINENT_RES := 513
 
@@ -232,15 +234,70 @@ func display_name(id: String) -> String:
 
 func sampler_for(id: String) -> TerrainSampler:
 	if not _samplers.has(id):
-		_samplers[id] = TerrainSampler.new(doc.continent(id), doc.planet)
+		var s := TerrainSampler.new(doc.continent(id), doc.planet)
+		s.set_regions(_region_data(id))
+		_samplers[id] = s
 	return _samplers[id]
+
+
+## Daten der gespeicherten Detailregionen eines Kontinents (Lage aus der Weltdatei, damit z. B. ein
+## vergrößerter Kontinent seine Regionen mitnimmt). Fehlt eine Datei, gilt dort die Erzeugung.
+func _region_data(id: String) -> Array:
+	var out := []
+	var missing := 0
+	for r in doc.continent(id).get("regions", []):
+		if not (r as Dictionary).has("checksum"):
+			continue
+		var data := RegionStore.load_data(save_path, r)
+		if data.is_empty():
+			missing += 1
+			continue
+		var placed := data.duplicate()
+		placed["cx"] = float(r["cx"])
+		placed["cy"] = float(r["cy"])
+		placed["size"] = float(r["size"])
+		placed["result_path"] = RegionStore.result_file_for(save_path, r)
+		placed["basis"] = str(r.get("basis", ""))
+		out.append(placed)
+	if missing > 0:
+		_notice = "%d Detailregion%s ohne lesbare Daten – dort gilt die Erzeugung." % [missing, "" if missing == 1 else "en"]
+	return out
+
+
+## Detailregion an dieser Stelle: vorhandene wiederverwenden (gleicher Rahmen), sonst aus dem
+## Ausschnitt anlegen – vorhandene Geografie und Bearbeitungen übernommen, feinere Strukturen in
+## Regionsauflösung ergänzt – und dauerhaft speichern. Gibt den Rahmen {cx, cy, size} zurück.
+func ensure_region(cx: float, cy: float, size: float) -> Dictionary:
+	var found := doc.region_near(active_id, cx, cy, size)
+	if not found.is_empty():
+		return {"cx": float(found["cx"]), "cy": float(found["cy"]), "size": size}
+	var started := Time.get_ticks_usec()
+	var w := sampler_for(active_id).window(cx, cy, size, REGION_RES)
+	var parent: Dictionary = levels.back() if not levels.is_empty() else {}
+	var region := {"id": RegionStore.new_id(), "cx": cx, "cy": cy, "size": size, "res": REGION_RES,
+		"level": levels.size(), "parent_size": parent.get("size", 0.0),
+		"created": Time.get_datetime_string_from_system(true),
+		"basis": sampler_for(active_id).base_fingerprint(cx, cy, size, REGION_RES)}
+	var sum := RegionStore.save(save_path, region, w)
+	if sum == "":
+		_notice = "Detailregion konnte nicht gespeichert werden – sie wird bei jedem Öffnen neu berechnet."
+		doc.remember_region(active_id, cx, cy, size)
+		return {"cx": cx, "cy": cy, "size": size}
+	region["checksum"] = sum
+	doc.add_region(active_id, region)
+	_forget(active_id)
+	sampler = sampler_for(active_id)
+	_forget_windows()
+	print("Detailregion %s angelegt in %d ms" % [EditorUI.meters(size), (Time.get_ticks_usec() - started) / 1000])
+	return {"cx": cx, "cy": cy, "size": size}
 
 
 ## Grober Ausschnitt eines ganzen Kontinents (für Globus, Übersicht und Fläche).
 func globe_window(id: String) -> TerrainWindow:
 	if not _globe_windows.has(id):
 		var c := doc.continent(id)
-		_globe_windows[id] = sampler_for(id).window(0.0, 0.0, c["size_km"] * 1000.0, GLOBE_RES)
+		# Ohne Zusammenfassung der Detailregionen: Bei 129 Punkten deckt eine 25-km-Region kaum zwei.
+		_globe_windows[id] = sampler_for(id).window(0.0, 0.0, c["size_km"] * 1000.0, GLOBE_RES, false)
 	return _globe_windows[id]
 
 
@@ -361,8 +418,7 @@ func deepen_at(render_point: Vector3) -> void:
 	var cell := size / 256.0
 	var cx := clampf(snappedf(landscape.continent_x(render_point), cell), -half, half)
 	var cy := clampf(snappedf(landscape.continent_y(render_point), cell), -half, half)
-	levels.append({"cx": cx, "cy": cy, "size": size})
-	doc.remember_region(active_id, cx, cy, size)
+	levels.append(ensure_region(cx, cy, size))
 	_queue_save()
 	_show_level()
 	camera_rig.jump_to(Vector3.ZERO, camera_rig.max_distance * 0.95)
@@ -748,6 +804,12 @@ func _on_doc_changed(command: Dictionary, undone: bool) -> void:
 		# Der aktuelle Ausschnitt ist schon live bemalt; gröbere werden beim nächsten Zeigen neu berechnet.
 		for i in levels.size() - 1:
 			levels[i]["window"] = null
+		# Über einer feineren Detailregion zeigt dieser Ausschnitt deren Zusammenfassung – nach dem
+		# Malen neu zusammenfassen statt die live gemalte Fassung zu behalten.
+		if _overlaps_finer_region(command["stroke"], levels.back()):
+			_forget_windows()
+			_show_level()
+			return
 		landscape.sampler = sampler
 		if levels.size() > 1 and _reaches_outside(command["stroke"], levels.back()):
 			landscape.update_context(_level_window(levels.size() - 2))
@@ -781,6 +843,9 @@ func _queue_save() -> void:
 
 func _save_now() -> void:
 	var error := doc.save(save_path)
+	# Zwischenstände der Detailregionen auf den gespeicherten Stand bringen (schnelleres Öffnen).
+	for s in _samplers.values():
+		(s as TerrainSampler).keep_results_on_disk()
 	_dirty = error != OK
 	ui.set_saved(error == OK)
 	if error != OK:
@@ -899,6 +964,21 @@ func _update_scale_bar() -> void:
 	if a == null or b == null:
 		return
 	ui.set_scale_bar((a as Vector3).distance_to(b) / 40.0 / landscape.units_per_m)
+
+
+## Liegt unter dem Strich eine Detailregion, die feiner ist als dieser Ausschnitt?
+func _overlaps_finer_region(stroke: Dictionary, level: Dictionary) -> bool:
+	var b := Stroke.bounds(stroke)
+	# Live gemalt wird weiter als der Pinselradius (Ränder, Erzeugerverzerrung, Ufer, ganze Zellen):
+	# großzügig prüfen, lieber einmal zu viel neu zusammenfassen.
+	var reach := float(stroke.get("radius", 0.0)) * 2.0 + float(level["size"]) / 256.0 * 4.0
+	for r in continent().get("regions", []):
+		if not (r as Dictionary).has("checksum") or float(r["size"]) >= float(level["size"]) * 0.999:
+			continue
+		var h: float = float(r["size"]) * 0.5 + reach
+		if b[0] < float(r["cx"]) + h and b[2] > float(r["cx"]) - h and b[1] < float(r["cy"]) + h and b[3] > float(r["cy"]) - h:
+			return true
+	return false
 
 
 ## Reicht ein Strich (mit Radius) über den Ausschnitt hinaus? Dann ändert er auch die Umgebung.

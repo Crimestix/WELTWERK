@@ -26,6 +26,7 @@ func _initialize() -> void:
 	w2.extent_half = c["size_km"] * 500.0
 	t = Time.get_ticks_usec()
 	sampler.evaluate_base(w2)
+	sampler.finish_forest(w2)
 	print("Grundform %.0f ms" % ((Time.get_ticks_usec() - t) / 1000.0))
 	for stroke in c["strokes"]:
 		t = Time.get_ticks_usec()

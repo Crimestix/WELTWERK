@@ -103,6 +103,9 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
 ## Noch offen (Stand 21. 11. 2026, Einzelheiten docs/BERICHT_KONTINENTEDITOR.md)
 - Kartenbild noch ruhiger als die Referenz (Kleinrelief, verästelte Gewässer, Fjorde).
 - Flüssiger Übergang zwischen Maßstäben (heute Wechsel; Daten sind dafür bereit).
+- Detailregionen: Regionsergebnisse noch nicht im Hintergrund gerechnet (Vertiefen und Malen über
+  Regionen 1,5–2,5 s statt 0,6 s); Regionen lassen sich nicht löschen; Regionsordner muss beim
+  Sichern mit; Globus und Übersichtskarte zeigen die Erzeugung ohne Zusammenfassung.
 - Erzeugte Grundform als bearbeitbare Form; Gelände folgt beim Formziehen erst beim Loslassen.
 - Regionen mit Namen und Liste, Rechteck aufziehen; Flüsse, die sich selbst einen Weg suchen.
 - Überlappende Kontinente nur gemeldet, nicht zusammengeführt; Rückgängig gilt je Sitzung.
@@ -131,6 +134,18 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
   in Metern, 64 Bit, x = Osten, y = Norden.
 - Ansichten sind Fenster (Mitte, Größe); „Vertiefen“ = 1/8. Darstellung auf 1000 Einheiten
   normiert, grobe Ansichten überhöht (nur Darstellung).
+- **Detailregionen** (`RegionStore`, Bericht `docs/BERICHT_DETAILREGIONEN.md`): Vertiefen speichert
+  die Grunddaten des Ausschnitts (257², Landanteil, Relief, Waldanlage, Erosionsrelief) als
+  `<welt>_regionen/<id>.region` (zstd, Prüfsumme in der Weltdatei unter `regions`). Die
+  Strichliste bleibt die eine Quelle der Bearbeitungen (verknüpft, nicht eingebacken). Gleiches
+  Raster → gespeicherte Daten statt Erzeugung; feinere Ausschnitte → Erzeugung + (Regionsdaten −
+  Erzeugung im Regionsraster), nur wenn sich der Erzeugungsstand (`basis`) seit dem Anlegen
+  geändert hat; gröbere Ansichten → Zellmittel des fertigen Regionsgeländes (je Stichprobe die
+  feinste Region). Wald wird als Anlage ohne Klima gespeichert (`forest_potential`). Fertige
+  Regionsergebnisse werden nach Stand gemerkt (Speicher und `<id>.ergebnis` mit Prüfwert; Stand in
+  gleichbleibender Schreibweise `TerrainSampler.canonical`, Fassung `RESULT_VERSION` – bei Änderungen
+  an Erzeugung oder Zusammenfassung erhöhen). Regionen sind keine Befehle; Größenänderung und
+  Anlegen/Löschen eines Kontinents verlieren sie bei Rückgängig nicht.
 - Packed-Arrays fremder Objekte nie elementweise beschreiben (`w.feld[k] = …` kopiert jedes Mal
   das ganze Feld): lokal holen, ändern, einmal zurückweisen.
 
@@ -140,7 +155,8 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
   Maßstäbe, Speichern, Vorführmodus), `landscape_view.gd` (Ausschnitt, Malen, Bäume, Umgebung),
   `globe_view.gd`, `editor_ui.gd`, Shader `landscape`/`globe`.
 - `src/domain/world/` – Weltmodell: `world_document.gd`, `terrain_sampler.gd`,
-  `terrain_window.gd`, `stroke.gd`, `climate.gd`, `globe_math.gd`.
+  `terrain_window.gd`, `stroke.gd`, `climate.gd`, `globe_math.gd`, `erosion_field.gd`
+  (Erosionsrelief als Geografie), `landmarks.gd` (Ortsprüfung), `region_store.gd` (Detailregionen).
 - `scenes/main.tscn` – erster Schritt (einzelne Insel), nur noch zum Vergleich.
 - `scenes/lighting.tscn` – gemeinsames Licht (Himmel, Sonne, Nebel) für alle Szenen.
 - `scenes/style_test.tscn`, `src/style_test/` – Stiltest A/B/C (`docs/STILTEST.md`).
@@ -163,7 +179,11 @@ Bedienung dort: Werkzeugleiste links, Pfad oben (Welt / Kontinent / Region), Rü
 - `src/editor/comparison_run.gd` (`--vergleich`), `recording_run.gd` (`--aufnahme`) – Vergleich mit
   der Kontinentalreferenz und aufgezeichneter Bedienablauf.
 - `docs/BERICHT_KONTINENTE.md` – Bericht des Kontinent-Auftrags; `docs/abnahme/`, `docs/stufen/` Bilder.
-- `tools/profile_window.gd` – Auswertungszeit eines Ausschnitts je Bearbeitung messen.
+- `tools/profile_window.gd` – Auswertungszeit eines Ausschnitts je Bearbeitung messen;
+  `tools/profile_regions.gd` – Rechenzeiten mit Detailregionen (schreibt Zwischenstände);
+  `tools/check_region_summary.gd` – Rasterpunkte grober Stufen gegen das Zellmittel der Regionen.
+- `src/editor/landmark_run.gd` (`--orte`, Bericht `docs/ORTE_PRUEFUNG.md`), `realtime_run.gd` +
+  `realtime_capture.gd` (`--echtzeit`, Film mit `tools/make_video.py`).
 - `assets/target/` – Zielbestand (Blender-Skript + Higgsfield; Originale und Protokoll in
   `assets/target/source/`, nur `generated.json` im Repository).
 - `tools/` – Ladeskript Poly Haven, Blender-Skripte, Stiltest-Messlauf.
@@ -201,6 +221,8 @@ $godot = "C:\Users\Mattes\Downloads\Godot_v4.7.2-stable_win64.exe\Godot_v4.7.2-s
 & $godot --position 2000,60 --path D:\WELTWERK -- --welt=<welt.json> --stufen=<ordner> [--richtung=250]  # Bildreihe aller Stufen
 & $godot --position 2000,60 --path D:\WELTWERK -- --vergleich=<ordner>    # gleicher Umriss wie die Referenz, Bilder + Prüfungen
 & $godot --position 2000,60 --path D:\WELTWERK --write-movie <film.ogv> --fixed-fps 30 -- --aufnahme=<ordner>  # Bedienablauf filmen
+& $godot --position 2000,60 --path D:\WELTWERK -- --orte=<ordner> --schritt=1   # Gipfel/Pass/Tal auf allen Stufen, dann --schritt=2 (Neustart)
+& $godot --headless --path D:\WELTWERK --script res://tools/profile_regions.gd -- --welt=<welt.json>  # Rechenzeiten mit Regionen
 & $godot --position 2000,60 --path D:\WELTWERK -- --echtzeit=<ordner> [--ohne-bilder]   # Zoom-/Bearbeitungsablauf in Echtzeit aufnehmen
 python tools\make_video.py <ordner> [--out film.avi] [--kontaktbogen bogen.jpg]   # Film (MJPEG-AVI) mit sichtbaren Rechenpausen
 & $godot --path D:\WELTWERK res://scenes/style_test.tscn                         # Stiltest
@@ -250,3 +272,13 @@ Weltdatei: `user://welt.json` (Windows `%APPDATA%\Godot\app_userdata\Weltwerk\we
 - 21. 11. 2026 – Auftrag Kartengrafik (Bestand produzieren und einbauen). Zwei Varianten im Editor
   verglichen (A Luftbild, B gemalt, gleiche Erosionskacheln); gewählt A mit grüner Wiesentönung
   aus B. Strandtextur verworfen (falscher Maßstab). Higgsfield: 26 Guthaben (Stand 527,85).
+- 21. 11. 2026 – Auftrag „dieselbe Landschaft auf allen Maßstäben“: Erosionsrelief ist jetzt
+  Geografie (`ErosionField` im `TerrainSampler`, feste Lage je Kontinent, je Raster so fein wie es
+  trägt); die Darstellung ergänzt nur den Anteil feiner als das Raster. Prüfung an Gipfel, Pass, Tal
+  (`--orte`), Echtzeitaufnahme mit sichtbaren Rechenpausen (`--echtzeit`). Bericht `docs/ORTE_PRUEFUNG.md`.
+- 21. 11. 2026 – Auftrag Detailregionen: Vertiefen legt eine dauerhafte, verknüpfte Region an
+  (Grunddaten gespeichert, Bearbeitungen bleiben in der Strichliste, gröbere Ansichten zeigen das
+  Zellmittel). Routineentscheidungen: Regionsauflösung 257² wie jeder Ausschnitt; Anlegen ist kein
+  Rückgängig-Schritt (ändert das Bild nicht); Region bleibt bei neuer Variante; Übergang am Rand 4 %;
+  Zwischenstände der Ergebnisse auf der Platte (abgeleitet, nach Stand geprüft). Higgsfield nicht
+  genutzt. Bericht `docs/BERICHT_DETAILREGIONEN.md`.
